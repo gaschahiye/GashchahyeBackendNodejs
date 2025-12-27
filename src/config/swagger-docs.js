@@ -20,7 +20,7 @@ const options = {
       },
     },
     servers: [
-      { url: "https://gaschahye-backend-production.up.railway.app/api", description: "Development server" },
+      { url: "https://gashchahyebackendnodejs-production.up.railway.app/api", description: "Development server" },
         { url: "http://localhost:8080/api", description: "Local server" },
       { url: "https://api.totalaccess.com", description: "Production server" },
     ],
