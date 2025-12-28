@@ -15,7 +15,7 @@ app.use(helmet());
 const corsOptions = {
   origin: (origin, callback) => {
     // 1.  allow any localhost / 127.0.0.1
-    if (!origin || /^https?:\/\/localhost(:|$)/.test(origin) || /^https?:\/\/127\.0\.0\.1/.test(origin)) {
+    if (!origin || /^https?:\/\/localhost(:|$)/.test(origin) || /^https?:\/\/127\.0\.0\.1/.test(origin) ) {
       return callback(null, true);
     }
 
