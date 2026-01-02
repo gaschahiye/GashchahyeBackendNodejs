@@ -5,6 +5,7 @@ const Inventory = require('../models/Inventory');
 const Notification = require('../models/Notification');
 const NotificationService = require('./notification.service');
 const { emitSellerApproval } = require('../config/socket');
+const Rating = require('../models/Rating');
 
 class AdminService {
     /**
@@ -227,7 +228,7 @@ class AdminService {
         const seller = await User.findById(sellerId);
         if (!seller || seller.role !== 'seller') throw new Error('Seller not found');
 
-        const [locations, inventory, orders, rating] = await Promise.all([
+        const [locations, inventory, orders, ratings] = await Promise.all([
             Location.find({ seller: sellerId }),
             Inventory.find({ seller: sellerId }).populate('location'),
             Order.find({ seller: sellerId })
@@ -252,7 +253,7 @@ class AdminService {
             locations,
             inventory,
             orders,
-            rating,
+            ratings,
             stats: {
                 totalOrders,
                 completedOrders,
