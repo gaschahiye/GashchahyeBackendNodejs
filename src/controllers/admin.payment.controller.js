@@ -365,7 +365,7 @@ const clearPayment = async (req, res, next) => {
             await NotificationService.createNotification(order.seller, {
                 title: 'Payment Completed',
                 message: `Payment of ₹${timelineEntry.amount} for order ${order.orderId} has been cleared.`,
-                type: 'payment_completed',
+                type: 'payment_success',
                 relatedOrder: order._id
             });
 
@@ -876,7 +876,7 @@ const syncGoogleSheetInternal = async (userId = null) => {
                             await NotificationService.createNotification(order.seller, {
                                 title: 'Payment Completed',
                                 message: `Payment of ₹${paymentEntry.amount} for order ${order.orderId} has been cleared.`,
-                                type: 'payment_completed',
+                                type: 'payment_success',
                                 relatedOrder: order._id
                             });
 
