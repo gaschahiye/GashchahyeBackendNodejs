@@ -372,14 +372,21 @@ const clearPayment = async (req, res, next) => {
             // Emit socket event to seller
             const io = getIO();
             if (io) {
-                io.to(`user_${order.seller}`).emit('payment_completed', {
+                const socketRoom = `user_${order.seller}`;
+                const eventData = {
                     orderId: order.orderId,
                     timelineId: timelineEntry.timelineId,
                     amount: timelineEntry.amount,
                     paymentType: timelineEntry.type,
                     referenceId: timelineEntry.referenceId,
                     timestamp: new Date()
-                });
+                };
+
+                io.to(socketRoom).emit('payment_completed', eventData);
+                console.log(`🔌 Socket event 'payment_completed' emitted to room: ${socketRoom}`);
+                console.log(`📦 Event data:`, JSON.stringify(eventData, null, 2));
+            } else {
+                console.warn('⚠️ Socket.io not available, skipping socket emission');
             }
 
             console.log(`💰 Payment completion notification sent to seller ${order.seller} for order ${order.orderId}`);
@@ -876,14 +883,21 @@ const syncGoogleSheetInternal = async (userId = null) => {
                             // Emit socket event to seller
                             const io = getIO();
                             if (io) {
-                                io.to(`user_${order.seller}`).emit('payment_completed', {
+                                const socketRoom = `user_${order.seller}`;
+                                const eventData = {
                                     orderId: order.orderId,
                                     timelineId: paymentEntry.timelineId,
                                     amount: paymentEntry.amount,
                                     paymentType: paymentEntry.type,
                                     referenceId: paymentEntry.referenceId,
                                     timestamp: new Date()
-                                });
+                                };
+
+                                io.to(socketRoom).emit('payment_completed', eventData);
+                                console.log(`🔌 Socket event 'payment_completed' emitted to room: ${socketRoom}`);
+                                console.log(`📦 Event data:`, JSON.stringify(eventData, null, 2));
+                            } else {
+                                console.warn('⚠️ Socket.io not available, skipping socket emission');
                             }
 
                             console.log(`💰 Payment completion notification sent to seller ${order.seller} for order ${order.orderId}`);
