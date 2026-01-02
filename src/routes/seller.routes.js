@@ -2,6 +2,7 @@
 
 const express = require('express');
 const sellerController = require('../controllers/seller.controller');
+const sellerPaymentController = require('../controllers/seller.payment.controller');
 const { protect, authorize } = require('../middleware/auth.middleware');
 const validate = require('../middleware/validate.middleware');
 const sellerValidators = require('../validators/seller.validator');
@@ -168,6 +169,120 @@ router.get('/profile', sellerController.getSellerProfile);
  *         description: Phone number or email already in use
  */
 router.patch('/profile', validate(sellerValidators.updateProfile), sellerController.updateSellerProfile);
+
+/**
+ * @swagger
+ * /seller/payments:
+ *   get:
+ *     summary: Get payment timeline for seller's orders
+ *     description: View all payment timeline entries (delivery fees, sales, refunds) for orders from this seller. Returns all entries without pagination.
+ *     tags: [Seller]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         description: Filter by payment status
+ *         schema:
+ *           type: string
+ *           enum: [pending, completed]
+ *       - name: type
+ *         in: query
+ *         description: Filter by payment type
+ *         schema:
+ *           type: string
+ *           enum: [pickup_fee, delivery_fee, refund, sale, other]
+ *       - name: dateFrom
+ *         in: query
+ *         description: Filter by start date (YYYY-MM-DD)
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - name: dateTo
+ *         in: query
+ *         description: Filter by end date (YYYY-MM-DD)
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - name: searchQuery
+ *         in: query
+ *         description: Search by order ID, person name, or phone
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Payment timeline retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       timelineId:
+ *                         type: string
+ *                       orderId:
+ *                         type: string
+ *                       personName:
+ *                         type: string
+ *                       personType:
+ *                         type: string
+ *                       phone:
+ *                         type: string
+ *                       paymentType:
+ *                         type: string
+ *                       amount:
+ *                         type: number
+ *                       status:
+ *                         type: string
+ *                       date:
+ *                         type: string
+ *                         format: date-time
+ *                       notes:
+ *                         type: string
+ *                       liabilityType:
+ *                         type: string
+ *                       referenceId:
+ *                         type: string
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     totalPending:
+ *                       type: number
+ *                     amountToDrivers:
+ *                       type: number
+ *                     amountToRefund:
+ *                       type: number
+ *                     clearedAmount:
+ *                       type: number
+ *                     pendingCount:
+ *                       type: number
+ *                     clearedCount:
+ *                       type: number
+ *                     statusDistribution:
+ *                       type: object
+ *                       properties:
+ *                         pending:
+ *                           type: number
+ *                         completed:
+ *                           type: number
+ *                 totalEntries:
+ *                   type: number
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Seller access only
+ */
+router.get('/payments', sellerPaymentController.getSellerPaymentTimeline);
+
 
 /**
  * @swagger

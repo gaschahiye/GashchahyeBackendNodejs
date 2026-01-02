@@ -7,7 +7,7 @@ const Order = require('../models/Order');
 const Cylinder = require('../models/Cylinder');
 const InvoiceService = require('../services/invoice.service');
 const NotificationService = require('../services/notification.service');
-const {startSession} = require("mongoose");
+const { startSession } = require("mongoose");
 
 
 
@@ -103,7 +103,7 @@ const updateLocation = async (req, res, next) => {
 
 // ==================== INVENTORY CONTROLLERS ====================
 
-const  addUpdateInventory = async (req, res, next) => {
+const addUpdateInventory = async (req, res, next) => {
   try {
     console.log("BODY:", req.body);
     const { locationid, location, city, pricePerKg, cylinders, addOns = [] } = req.body;
@@ -160,14 +160,14 @@ const  addUpdateInventory = async (req, res, next) => {
       // ✅ If pricePerKg changed, update all other inventories in the same city for this seller
       if (pricePerKg !== undefined && oldPricePerKg !== newPricePerKg) {
         await Inventory.updateMany(
-            {
-              seller: req.user._id,
-              city: inventory.city,
-              _id: { $ne: inventory._id } // Exclude the current inventory
-            },
-            {
-              $set: { pricePerKg: newPricePerKg }
-            }
+          {
+            seller: req.user._id,
+            city: inventory.city,
+            _id: { $ne: inventory._id } // Exclude the current inventory
+          },
+          {
+            $set: { pricePerKg: newPricePerKg }
+          }
         );
 
         console.log(`✅ Updated pricePerKg to ${newPricePerKg} for all inventories in ${inventory.city}`);
@@ -196,14 +196,14 @@ const  addUpdateInventory = async (req, res, next) => {
 
     // ✅ Update all existing inventories in the same city for this seller
     const updateResult = await Inventory.updateMany(
-        {
-          seller: req.user._id,
-          city: city,
-          _id: { $ne: inventory._id } // Exclude the newly created inventory
-        },
-        {
-          $set: { pricePerKg: pricePerKg }
-        }
+      {
+        seller: req.user._id,
+        city: city,
+        _id: { $ne: inventory._id } // Exclude the newly created inventory
+      },
+      {
+        $set: { pricePerKg: pricePerKg }
+      }
     );
 
     console.log(`✅ Updated pricePerKg to ${pricePerKg} for ${updateResult.modifiedCount} existing inventories in ${city}`);
@@ -235,48 +235,48 @@ const getInventory = async (req, res, next) => {
 
     // Fetch inventories with location details
     const inventories = await Inventory.find(query)
-        .populate('locationid', 'warehouseName address city')
-        .sort({ createdAt: -1 })
-        .lean();
+      .populate('locationid', 'warehouseName address city')
+      .sort({ createdAt: -1 })
+      .lean();
 
     // ✅ Get the pricePerKg for the city (should be same for all locations in the city)
     const cityPricePerKg = inventories.length > 0 ? inventories[0].pricePerKg : null;
 
     // Add stats for each inventory
     const inventoriesWithStats = await Promise.all(
-        inventories.map(async (inventory) => {
-          // Count issued cylinders for THIS specific warehouse/inventory
-          const issuedCylinders = await Order.countDocuments({
-            seller: sellerId,
-            warehouse: inventory._id,
-            status: { $in: ["pickup_ready", "completed"] }
-          });
+      inventories.map(async (inventory) => {
+        // Count issued cylinders for THIS specific warehouse/inventory
+        const issuedCylinders = await Order.countDocuments({
+          seller: sellerId,
+          warehouse: inventory._id,
+          status: { $in: ["pickup_ready", "completed"] }
+        });
 
-          // Count empty cylinders for THIS specific warehouse
-          const emptyCylinders = await Cylinder.countDocuments({
-            seller: sellerId,
-            warehouse: inventory._id,
-            status: 'empty'
-          });
+        // Count empty cylinders for THIS specific warehouse
+        const emptyCylinders = await Cylinder.countDocuments({
+          seller: sellerId,
+          warehouse: inventory._id,
+          status: 'empty'
+        });
 
-          // Calculate total inventory in stock
-          const totalInventory =
-              (inventory.cylinders?.['15kg']?.quantity || 0) +
-              (inventory.cylinders?.['11.8kg']?.quantity || 0) +
-              (inventory.cylinders?.['6kg']?.quantity || 0) +
-              (inventory.cylinders?.['4.5kg']?.quantity || 0);
+        // Calculate total inventory in stock
+        const totalInventory =
+          (inventory.cylinders?.['15kg']?.quantity || 0) +
+          (inventory.cylinders?.['11.8kg']?.quantity || 0) +
+          (inventory.cylinders?.['6kg']?.quantity || 0) +
+          (inventory.cylinders?.['4.5kg']?.quantity || 0);
 
-          // Count total addOns
-          const totalAddOns = inventory.addOns?.length || 0;
+        // Count total addOns
+        const totalAddOns = inventory.addOns?.length || 0;
 
-          return {
-            ...inventory,
-            issuedCylinders,
-            emptyCylinders,
-            totalInventory,
-            totalAddOns
-          };
-        })
+        return {
+          ...inventory,
+          issuedCylinders,
+          emptyCylinders,
+          totalInventory,
+          totalAddOns
+        };
+      })
     );
 
     // Calculate overall totals
@@ -340,13 +340,13 @@ const updateCityPrice = async (req, res, next) => {
 
     // Update ONLY pricePerKg for all inventories in the city
     const updateResult = await Inventory.updateMany(
-        {
-          seller: sellerId,
-          city: { $regex: new RegExp(`^${city.trim()}$`, 'i') }
-        },
-        {
-          $set: { pricePerKg: pricePerKg }
-        }
+      {
+        seller: sellerId,
+        city: { $regex: new RegExp(`^${city.trim()}$`, 'i') }
+      },
+      {
+        $set: { pricePerKg: pricePerKg }
+      }
     );
 
     console.log(`✅ Updated pricePerKg to ${pricePerKg} for ${updateResult.modifiedCount} inventories in ${city}`);
@@ -434,8 +434,8 @@ const getOrders = async (req, res, next) => {
     const query = { seller: req.user._id };
 
     // --------------------------------------------------
-// NEW FILTER LOGIC
-// --------------------------------------------------
+    // NEW FILTER LOGIC
+    // --------------------------------------------------
     if (status) {
       if (status === 'pending') {
         // buyer has just requested – seller hasn’t acted yet
@@ -450,18 +450,18 @@ const getOrders = async (req, res, next) => {
         query.status = status;
       }
     }
-// --------------------------------------------------
+    // --------------------------------------------------
 
     const skip = (page - 1) * limit;
 
     const [orders, total] = await Promise.all([
       Order.find(query)
-          .populate('buyer', 'fullName phoneNumber addresses')
-          .populate('driver', 'fullName vehicleNumber phoneNumber')
-          .populate('existingCylinder', 'serialNumber customName')
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(parseInt(limit)),
+        .populate('buyer', 'fullName phoneNumber addresses')
+        .populate('driver', 'fullName vehicleNumber phoneNumber')
+        .populate('existingCylinder', 'serialNumber customName')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
       Order.countDocuments(query)
     ]);
 
@@ -488,8 +488,8 @@ const markOrderReadyForPickup = async (req, res, next) => {
     const { warehouseId, notes } = req.body;
 
     const order = await Order.findOne({ orderId: orderId, seller: sellerId })
-        .populate('warehouse', 'location city')
-        .populate('buyer', 'fullName phoneNumber');
+      .populate('warehouse', 'location city')
+      .populate('buyer', 'fullName phoneNumber');
 
     if (!order) {
       return res.status(404).json({
@@ -606,10 +606,10 @@ const findDriverByZone = async (location, session = null) => {
 
       // Check if the delivery location is within driver's zone radius
       const distance = calculateDistance(
-          driverLocation.coordinates[1],  // latitude
-          driverLocation.coordinates[0],  // longitude
-          location.coordinates[1],        // delivery latitude
-          location.coordinates[0]         // delivery longitude
+        driverLocation.coordinates[1],  // latitude
+        driverLocation.coordinates[0],  // longitude
+        location.coordinates[1],        // delivery latitude
+        location.coordinates[0]         // delivery longitude
       );
 
       if (distance <= (driver.zone.radiusKm || 10)) { // Default 10km radius
@@ -630,10 +630,10 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
   const a =
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
 
@@ -685,8 +685,8 @@ const getDashboardStats = async (req, res, next) => {
 
     // 1️⃣ Get all inventories for this seller and populate their locations
     const inventories = await Inventory.find({ seller: sellerId })
-        .populate({ path: 'locationid', model: 'Location', select: 'warehouseName city address' })
-        .lean();
+      .populate({ path: 'locationid', model: 'Location', select: 'warehouseName city address' })
+      .lean();
 
     // 2️⃣ Filter only those inventories that have a valid location
     const inventoriesWithLocation = inventories.filter(inv => inv.locationid);
@@ -703,15 +703,15 @@ const getDashboardStats = async (req, res, next) => {
 
     // 4️⃣ Active cylinders
     const activeCylinders = await Order.find({ seller: sellerId, status: 'pickup_ready' })
-        .populate({
-          path: 'warehouse',            // 1️⃣ from Order to Inventory
-          populate: {
-            path: 'locationid',         // 2️⃣ from Inventory to Location
-            model: 'Location',
-            select: 'warehouseName city address',
-          },
-        })
-        .lean();
+      .populate({
+        path: 'warehouse',            // 1️⃣ from Order to Inventory
+        populate: {
+          path: 'locationid',         // 2️⃣ from Inventory to Location
+          model: 'Location',
+          select: 'warehouseName city address',
+        },
+      })
+      .lean();
 
     const activeCylinderList = activeCylinders.map((order) => ({
       orderId: order.orderId,
@@ -828,12 +828,12 @@ const getDashboardStatsByWarehouse = async (req, res, next) => {
       locationid: warehouseObjectId,
       seller: sellerId,
     })
-        .populate({
-          path: "locationid",
-          model: "Location",
-          select: "warehouseName city address",
-        })
-        .lean();
+      .populate({
+        path: "locationid",
+        model: "Location",
+        select: "warehouseName city address",
+      })
+      .lean();
 
     if (!inventory) {
       return res.status(200).json({
@@ -860,10 +860,10 @@ const getDashboardStatsByWarehouse = async (req, res, next) => {
 
     // 🔹 Calculate total inventory
     const totalInventories =
-        (inventory.cylinders?.["15kg"]?.quantity || 0) +
-        (inventory.cylinders?.["11.8kg"]?.quantity || 0) +
-        (inventory.cylinders?.["6kg"]?.quantity || 0) +
-        (inventory.cylinders?.["4.5kg"]?.quantity || 0);
+      (inventory.cylinders?.["15kg"]?.quantity || 0) +
+      (inventory.cylinders?.["11.8kg"]?.quantity || 0) +
+      (inventory.cylinders?.["6kg"]?.quantity || 0) +
+      (inventory.cylinders?.["4.5kg"]?.quantity || 0);
 
     // 🔹 Active cylinders (pickup_ready)
     const activeCylinders = await Order.find({
@@ -871,16 +871,16 @@ const getDashboardStatsByWarehouse = async (req, res, next) => {
       warehouse: inventory._id,
       status: "pickup_ready",
     })
-        .populate({
-          path: "warehouse",
-          populate: {
-            path: "locationid",
-            model: "Location",
-            select: "warehouseName city address",
-          },
-        })
-        .populate("buyer", "name email phone")
-        .lean();
+      .populate({
+        path: "warehouse",
+        populate: {
+          path: "locationid",
+          model: "Location",
+          select: "warehouseName city address",
+        },
+      })
+      .populate("buyer", "name email phone")
+      .lean();
 
     const activeCylinderList = activeCylinders.map((order) => ({
       orderId: order.orderId,
