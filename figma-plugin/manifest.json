@@ -1,0 +1,10 @@
+{
+  "name": "Design Importer",
+  "id": "design-importer-1767139832144",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": [
+    "figma"
+  ]
+}

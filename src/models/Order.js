@@ -118,7 +118,7 @@ const orderSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: [
-      'pending', 'accepted','assigned','qrgenerated', 'pickup_ready', 'in_transit', 'delivered',
+      'pending', 'accepted', 'assigned', 'qrgenerated', 'pickup_ready', 'in_transit', 'delivered',
       'completed', 'cancelled', 'refill_requested', 'refill_pickup',
       'refill_in_store', 'refill_ready', 'return_requested', 'return_pickup', 'returned'
     ],
@@ -141,7 +141,7 @@ const orderSchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
-  qrCodeUrl:{
+  qrCodeUrl: {
     type: String,
     unique: false,
   },
@@ -194,9 +194,16 @@ const orderSchema = new mongoose.Schema({
 
   /* ====== NEW: mini-ledger inside the same order row ====== */
   paymentTimeline: [{
-    type: { type: String, enum: ['pickup_fee','delivery_fee','refund','sale','other'], required: true },
+    timelineId: { type: String, required: true },
+    type: { type: String, enum: ['pickup_fee', 'delivery_fee', 'refund', 'sale', 'other'], required: true },
+    cause: { type: String },
     amount: { type: Number, required: true },
-    status: { type: String, enum: ['pending','completed'], default: 'pending' },
+    liabilityType: { type: String, enum: ['revenue', 'liability', 'refundable'], default: 'revenue' },
+    paymentMethod: { type: String, enum: ['jazzcash', 'easypaisa', 'card', 'cod', 'wallet'], default: 'cod' },
+    status: { type: String, enum: ['pending', 'completed'], default: 'pending' },
+    referenceId: { type: String },
+    processedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    processedAt: { type: Date },
     driverId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     createdAt: { type: Date, default: Date.now }
   }],
@@ -204,7 +211,7 @@ const orderSchema = new mongoose.Schema({
   driverEarnings: [{
     driver: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     amount: { type: Number, required: true },
-    status: { type: String, enum: ['pending','paid'], default: 'pending' },
+    status: { type: String, enum: ['pending', 'paid'], default: 'pending' },
     createdAt: { type: Date, default: Date.now }
   }]
 
@@ -212,7 +219,7 @@ const orderSchema = new mongoose.Schema({
   timestamps: true
 });
 
-orderSchema.pre('save', async function(next) {
+orderSchema.pre('save', async function (next) {
   if (!this.orderId) {
     const count = await this.constructor.countDocuments();
     this.orderId = `ORD-${Date.now()}-${count + 1}`;
@@ -220,7 +227,7 @@ orderSchema.pre('save', async function(next) {
   next();
 });
 
-orderSchema.pre('save', function(next) {
+orderSchema.pre('save', function (next) {
   const { cylinderPrice, securityCharges, deliveryCharges, urgentDeliveryFee, addOnsTotal } = this.pricing;
   this.pricing.subtotal = (cylinderPrice * this.quantity) + addOnsTotal;
   this.pricing.grandTotal = this.pricing.subtotal + securityCharges + deliveryCharges + urgentDeliveryFee;

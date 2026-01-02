@@ -191,7 +191,7 @@ router.get('/sellers/:sellerId', adminController.getSellerDetails);
  *       200:
  *         description: Seller status updated successfully
  */
-router.patch('/sellers/:sellerId/status',  adminController.updateSellerStatus);
+router.patch('/sellers/:sellerId/status', adminController.updateSellerStatus);
 
 
 /**
@@ -562,5 +562,246 @@ router.get('/drivers', adminController.getAllDrivers);
 router.get('/orders', adminController.getAllOrders);
 
 // ... export router
+
+
+// Multer for file uploads (Memory storage for processing Excel in buffer)
+const multer = require('multer');
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+/**
+ * @swagger
+ * /admin/payments:
+ *   get:
+ *     summary: Get payment timeline and admin revenue
+ *     description: Retrieve a paginated list of all payment timeline entries (sales, delivery fees, refunds) with flattened details. Includes statistical summary.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: page
+ *         in: query
+ *         schema: { type: integer, default: 1 }
+ *         description: Page number for pagination
+ *       - name: limit
+ *         in: query
+ *         schema: { type: integer, default: 20 }
+ *         description: Number of items per page
+ *       - name: dateFrom
+ *         in: query
+ *         schema: { type: string, format: date }
+ *         description: Filter by start date (YYYY-MM-DD)
+ *       - name: dateTo
+ *         in: query
+ *         schema: { type: string, format: date }
+ *         description: Filter by end date (YYYY-MM-DD)
+ *       - name: driverId
+ *         in: query
+ *         schema: { type: string }
+ *         description: Filter by Driver ID
+ *       - name: type
+ *         in: query
+ *         schema: { type: string, enum: [pickup_fee, delivery_fee, refund, sale, other, seller_payment, partial_refund] }
+ *         description: Filter by payment type
+ *       - name: status
+ *         in: query
+ *         schema: { type: string, enum: [pending, completed, failed] }
+ *         description: Filter by payment status
+ *       - name: searchQuery
+ *         in: query
+ *         schema: { type: string }
+ *         description: Search by Order ID, Person Name, or Phone
+ *     responses:
+ *       200:
+ *         description: Successful response with payment data and statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       orderId: { type: string }
+ *                       personName: { type: string }
+ *                       personType: { type: string }
+ *                       phone: { type: string }
+ *                       paymentType: { type: string }
+ *                       amount: { type: number }
+ *                       status: { type: string }
+ *                       date: { type: string, format: date-time }
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     totalPending: { type: number }
+ *                     amountToSellers: { type: number }
+ *                     amountToRefund: { type: number }
+ *                     clearedAmount: { type: number }
+ *                     pendingCount: { type: number }
+ *                     clearedCount: { type: number }
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     currentPage: { type: integer }
+ *                     totalPages: { type: integer }
+ *                     totalEntries: { type: integer }
+ */
+const adminPaymentController = require('../controllers/admin.payment.controller');
+router.get('/payments', adminPaymentController.getPaymentTimeline);
+
+
+/**
+ * @swagger
+ * /admin/payments/{timelineId}/clear:
+ *   post:
+ *     summary: Clear a specific payment
+ *     description: Manually mark a pending payment entry as completed. Can optionally add a reference ID and notes.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: timelineId
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *         description: The unique ID of the timeline entry (not the MongoDB _id, but the timelineId string)
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               referenceId:
+ *                 type: string
+ *                 description: External reference/transaction ID
+ *               notes:
+ *                 type: string
+ *                 description: Remarks or notes for clearing
+ *     responses:
+ *       200:
+ *         description: Payment cleared successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 payment: { type: object }
+ *       404:
+ *         description: Payment entry not found
+ *       400:
+ *         description: Payment already cleared
+ */
+router.post('/payments/:timelineId/clear', adminPaymentController.clearPayment);
+
+/**
+ * @swagger
+ * /admin/payments/export:
+ *   get:
+ *     summary: Export pending payments to Excel
+ *     description: Downloads an .xlsx file containing all pending payment entries. Useful for bulk processing.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Excel file download
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
+router.get('/payments/export', adminPaymentController.exportPayments);
+
+/**
+ * @swagger
+ * /admin/payments/import:
+ *   post:
+ *     summary: Bulk clear payments via Excel import
+ *     description: Upload an .xlsx file (same format as export) to bulk update payment statuses to 'completed'. Matches by 'ID'.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: The Excel file to upload
+ *     responses:
+ *       200:
+ *         description: Bulk processing result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ */
+router.post('/payments/import', upload.single('file'), adminPaymentController.importPayments);
+
+/**
+ * @swagger
+ * /admin/payments/rebuild-sheet:
+ *   post:
+ *     summary: Completely rebuild Google Sheet from Database
+ *     description: Wipes the Google Sheet and re-uploads all payment history. Use this if the sheet gets corrupted or out of sync.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Rebuild successful
+ */
+router.post('/payments/rebuild-sheet', adminPaymentController.rebuildSheet);
+
+/**
+ * @swagger
+ * /admin/payments/sync:
+ *   post:
+ *     summary: Sync payments from Google Sheet
+ *     description: Pulls latest statuses from the configured Google Sheet and updates the database.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sync result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ */
+router.post('/payments/sync', adminPaymentController.syncGoogleSheet);
+
+/**
+ * @swagger
+ * /admin/payments/sync-webhook:
+ *   post:
+ *     summary: Webhook for Google Sheets automatic sync (Internal)
+ *     description: Receives updates from Google Apps Script when a row is edited.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sync successful
+ */
+router.post('/payments/sync-webhook', adminPaymentController.syncGoogleSheetWebhook);
 
 module.exports = router;
