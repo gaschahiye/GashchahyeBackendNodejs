@@ -356,6 +356,38 @@ const clearPayment = async (req, res, next) => {
         const GoogleSheetService = require('../services/googleSheet.service');
         await GoogleSheetService.updateStatusInSheet(timelineId, 'completed', referenceId);
 
+        // ✅ NEW: Send notification and socket event to seller
+        try {
+            const NotificationService = require('../services/notification.service');
+            const { getIO } = require('../config/socket');
+
+            // Create notification for seller
+            await NotificationService.createNotification(order.seller, {
+                title: 'Payment Completed',
+                message: `Payment of ₹${timelineEntry.amount} for order ${order.orderId} has been cleared.`,
+                type: 'payment_completed',
+                relatedOrder: order._id
+            });
+
+            // Emit socket event to seller
+            const io = getIO();
+            if (io) {
+                io.to(`user_${order.seller}`).emit('payment_completed', {
+                    orderId: order.orderId,
+                    timelineId: timelineEntry.timelineId,
+                    amount: timelineEntry.amount,
+                    paymentType: timelineEntry.type,
+                    referenceId: timelineEntry.referenceId,
+                    timestamp: new Date()
+                });
+            }
+
+            console.log(`💰 Payment completion notification sent to seller ${order.seller} for order ${order.orderId}`);
+        } catch (notifError) {
+            console.error('Error sending payment completion notification:', notifError);
+            // Don't fail the request if notification fails
+        }
+
         res.json({
             success: true,
             message: 'Payment cleared successfully',
@@ -813,6 +845,9 @@ const syncGoogleSheetInternal = async (userId = null) => {
                 const refChanged = update.referenceId && paymentEntry.referenceId !== update.referenceId;
 
                 if (statusChanged || refChanged) {
+                    // Store old status to detect new completions
+                    const wasCompleted = paymentEntry.status === 'completed';
+
                     paymentEntry.status = update.status;
                     if (update.referenceId) paymentEntry.referenceId = update.referenceId;
 
@@ -823,6 +858,40 @@ const syncGoogleSheetInternal = async (userId = null) => {
 
                     await order.save();
                     successCount++;
+
+                    // ✅ NEW: Send notification and socket event when payment is newly completed
+                    if (statusChanged && update.status === 'completed' && !wasCompleted) {
+                        try {
+                            const NotificationService = require('../services/notification.service');
+                            const { getIO } = require('../config/socket');
+
+                            // Create notification for seller
+                            await NotificationService.createNotification(order.seller, {
+                                title: 'Payment Completed',
+                                message: `Payment of ₹${paymentEntry.amount} for order ${order.orderId} has been cleared.`,
+                                type: 'payment_completed',
+                                relatedOrder: order._id
+                            });
+
+                            // Emit socket event to seller
+                            const io = getIO();
+                            if (io) {
+                                io.to(`user_${order.seller}`).emit('payment_completed', {
+                                    orderId: order.orderId,
+                                    timelineId: paymentEntry.timelineId,
+                                    amount: paymentEntry.amount,
+                                    paymentType: paymentEntry.type,
+                                    referenceId: paymentEntry.referenceId,
+                                    timestamp: new Date()
+                                });
+                            }
+
+                            console.log(`💰 Payment completion notification sent to seller ${order.seller} for order ${order.orderId}`);
+                        } catch (notifError) {
+                            console.error('Error sending payment completion notification:', notifError);
+                            // Don't fail the sync if notification fails
+                        }
+                    }
                 }
             }
         }
