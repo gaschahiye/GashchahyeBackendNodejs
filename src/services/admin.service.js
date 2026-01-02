@@ -252,7 +252,7 @@ class AdminService {
             locations,
             inventory,
             orders,
-            ratings,
+            rating,
             stats: {
                 totalOrders,
                 completedOrders,
