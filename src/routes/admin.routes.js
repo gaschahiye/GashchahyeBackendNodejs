@@ -1,5 +1,6 @@
 const express = require('express');
 const adminController = require('../controllers/admin.controller');
+const adminPaymentController = require('../controllers/admin.payment.controller');
 const { protect, authorize } = require('../middleware/auth.middleware');
 const validate = require('../middleware/validate.middleware');
 const adminValidators = require('../validators/admin.validator');
@@ -652,7 +653,7 @@ const upload = multer({ storage: storage });
  *                     totalPages: { type: integer }
  *                     totalEntries: { type: integer }
  */
-const adminPaymentController = require('../controllers/admin.payment.controller');
+
 router.get('/payments', adminPaymentController.getPaymentTimeline);
 
 
