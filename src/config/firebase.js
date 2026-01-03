@@ -4,15 +4,18 @@ let serviceAccount;
 
 // ✅ 1. Railway / Production (ENV)
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  serviceAccount = JSON.parse(
-      process.env.FIREBASE_SERVICE_ACCOUNT.replace(/\\n/g, '\n')
-  );
+  serviceAccount =
+
+
+      JSON.parse(
+      Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_B64, 'base64')
+          .toString('utf8'));
   console.log('Using Firebase credentials from ENV');
 }
 
 // ✅ 2. Local development (JSON file)
 else {
-  serviceAccount = require('../../gaschahiye-c6f00-firebase-adminsdk-fbsvc-e8bd2ae386.json');
+  serviceAccount = require('../../gas.json');
   console.log('Using Firebase credentials from gas.json');
 }
 
