@@ -5,7 +5,7 @@ const serviceAccount = require('../../gas.json');
 try {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET
+    storageBucket: 'gaschahiye-c6f00.firebasestorage.app'
   });
   
   console.log('Firebase Admin initialized successfully');
