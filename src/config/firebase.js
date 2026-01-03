@@ -8,7 +8,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 
 
       JSON.parse(
-      Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_B64, 'base64')
+      Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64')
           .toString('utf8'));
   console.log('Using Firebase credentials from ENV');
 }
