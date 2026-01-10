@@ -437,17 +437,26 @@ const getOrders = async (req, res, next) => {
     // NEW FILTER LOGIC
     // --------------------------------------------------
     if (status) {
-      if (status === 'pending') {
-        // buyer has just requested – seller hasn’t acted yet
-        query.status = { $in: ['pending', 'refill_requested', 'return_requested'] };
-      } else if (status === 'inprocess') {
-        // everything that is neither “new” nor finished
-        query.status = {
-          $nin: ['pending', 'refill_requested', 'return_requested', 'completed', 'cancelled']
-        };
-      } else {
-        // exact match for any other status string
-        query.status = status;
+      switch (status) {
+        case 'pending':
+          query.status = 'pending';
+          break;
+        case 'refill':
+          query.status = 'refill_in_store';
+          break;
+        case 'inprocess':
+          query.status = 'in_transit';
+          break;
+        case 'delivered':
+          query.status = 'delivered';
+          break;
+        case 'completed':
+          query.status = 'completed';
+          break;
+        default:
+          // exact match for any other status string
+          query.status = status;
+          break;
       }
     }
     // --------------------------------------------------

@@ -322,19 +322,19 @@ const getPaymentTimeline = async (req, res, next) => {
  */
 const clearPayment = async (req, res, next) => {
     try {
-        const {timelineId} = req.params;
-        const {referenceId, notes} = req.body;
+        const { timelineId } = req.params;
+        const { referenceId, notes } = req.body;
 
-        const order = await Order.findOne({'paymentTimeline.timelineId': timelineId});
+        const order = await Order.findOne({ 'paymentTimeline.timelineId': timelineId });
 
         if (!order) {
-            return res.status(404).json({success: false, message: 'Payment entry not found'});
+            return res.status(404).json({ success: false, message: 'Payment entry not found' });
         }
 
         const timelineEntry = order.paymentTimeline.find(t => t.timelineId === timelineId);
 
         if (timelineEntry.status === 'completed') {
-            return res.status(400).json({success: false, message: 'Payment is already cleared'});
+            return res.status(400).json({ success: false, message: 'Payment is already cleared' });
         }
 
         timelineEntry.status = 'completed';
@@ -362,7 +362,7 @@ const clearPayment = async (req, res, next) => {
         // ✅ NEW: Send notification and socket event to seller
         try {
             const NotificationService = require('../services/notification.service');
-            const {getIO} = require('../config/socket');
+            const { getIO } = require('../config/socket');
 
             // Create notification for seller
             await NotificationService.createNotification(order.seller, {
@@ -384,11 +384,12 @@ const clearPayment = async (req, res, next) => {
         } catch (error) {
             next(error);
         }
-    } catch (e) {
+    }
+    catch (e) {
 
         next(error);
     };
-}
+};
 
     /**
      * Export Payments to Excel
@@ -396,15 +397,15 @@ const clearPayment = async (req, res, next) => {
      */
     const exportPayments = async (req, res, next) => {
         try {
-            const pipeline = [{$unwind: '$paymentTimeline'}];
+            const pipeline = [{ $unwind: '$paymentTimeline' }];
 
             // Allow both pending and completed for the ledger view
-            pipeline.push({$match: {'paymentTimeline.status': {$in: ['pending', 'completed']}}});
+            pipeline.push({ $match: { 'paymentTimeline.status': { $in: ['pending', 'completed'] } } });
 
             // ✅ FILTER: Exclude payments without timelineId
             pipeline.push({
                 $match: {
-                    'paymentTimeline.timelineId': {$exists: true, $ne: null, $ne: ''}
+                    'paymentTimeline.timelineId': { $exists: true, $ne: null, $ne: '' }
                 }
             });
 
@@ -415,17 +416,17 @@ const clearPayment = async (req, res, next) => {
                         $or: [
                             {
                                 $and: [
-                                    {$ne: ['$paymentTimeline.cause', 'Security Deposits']},
-                                    {$ne: ['$paymentTimeline.type', 'delivery_fee']}
+                                    { $ne: ['$paymentTimeline.cause', 'Security Deposits'] },
+                                    { $ne: ['$paymentTimeline.type', 'delivery_fee'] }
                                 ]
                             },
                             {
                                 $and: [
-                                    {$in: ['$orderType', ['return']]},
+                                    { $in: ['$orderType', ['return']] },
                                     {
                                         $or: [
-                                            {$eq: ['$paymentTimeline.cause', 'Security Deposits']},
-                                            {$eq: ['$paymentTimeline.type', 'delivery_fee']}
+                                            { $eq: ['$paymentTimeline.cause', 'Security Deposits'] },
+                                            { $eq: ['$paymentTimeline.type', 'delivery_fee'] }
                                         ]
                                     }
                                 ]
@@ -468,9 +469,9 @@ const clearPayment = async (req, res, next) => {
             // Flatten Lookups
             pipeline.push({
                 $addFields: {
-                    driver: {$arrayElemAt: ['$driverDetails', 0]},
-                    sellerInfo: {$arrayElemAt: ['$sellerDetails', 0]},
-                    buyerInfo: {$arrayElemAt: ['$buyerDetails', 0]}
+                    driver: { $arrayElemAt: ['$driverDetails', 0] },
+                    sellerInfo: { $arrayElemAt: ['$sellerDetails', 0] },
+                    buyerInfo: { $arrayElemAt: ['$buyerDetails', 0] }
                 }
             });
 
@@ -481,23 +482,19 @@ const clearPayment = async (req, res, next) => {
                         $switch: {
                             branches: [
                                 {
-                                    case: {$eq: ['$paymentTimeline.type', 'delivery_fee']},
-                                    then: {name: '$driver.fullName', type: 'driver', phone: '$driver.phoneNumber'}
+                                    case: { $eq: ['$paymentTimeline.type', 'delivery_fee'] },
+                                    then: { name: '$driver.fullName', type: 'driver', phone: '$driver.phoneNumber' }
                                 },
                                 {
-                                    case: {$in: ['$paymentTimeline.type', ['sale', 'seller_payment']]},
-                                    then: {
-                                        name: '$sellerInfo.businessName',
-                                        type: 'seller',
-                                        phone: '$sellerInfo.phoneNumber'
-                                    }
+                                    case: { $in: ['$paymentTimeline.type', ['sale', 'seller_payment']] },
+                                    then: { name: '$sellerInfo.businessName', type: 'seller', phone: '$sellerInfo.phoneNumber' }
                                 },
                                 {
-                                    case: {$in: ['$paymentTimeline.type', ['refund', 'partial_refund']]},
-                                    then: {name: '$buyerInfo.fullName', type: 'buyer', phone: '$buyerInfo.phoneNumber'}
+                                    case: { $in: ['$paymentTimeline.type', ['refund', 'partial_refund']] },
+                                    then: { name: '$buyerInfo.fullName', type: 'buyer', phone: '$buyerInfo.phoneNumber' }
                                 }
                             ],
-                            default: {name: 'Unknown', type: 'other', phone: ''}
+                            default: { name: 'Unknown', type: 'other', phone: '' }
                         }
                     }
                 }
@@ -509,11 +506,11 @@ const clearPayment = async (req, res, next) => {
                     _id: 0,
                     timelineId: '$paymentTimeline.timelineId',
                     orderId: '$orderId',
-                    date: {$dateToString: {format: "%Y-%m-%d %H:%M", date: "$paymentTimeline.createdAt"}},
+                    date: { $dateToString: { format: "%Y-%m-%d %H:%M", date: "$paymentTimeline.createdAt" } },
 
-                    personName: {$ifNull: ['$resolvedPerson.name', 'N/A']},
+                    personName: { $ifNull: ['$resolvedPerson.name', 'N/A'] },
                     personType: '$resolvedPerson.type',
-                    personPhone: {$ifNull: ['$resolvedPerson.phone', 'N/A']},
+                    personPhone: { $ifNull: ['$resolvedPerson.phone', 'N/A'] },
 
                     type: '$paymentTimeline.type',
                     details: '$paymentTimeline.cause',
@@ -530,7 +527,7 @@ const clearPayment = async (req, res, next) => {
                 }
             });
 
-            pipeline.push({$sort: {date: -1}});
+            pipeline.push({ $sort: { date: -1 } });
 
             const payments = await Order.aggregate(pipeline);
 
@@ -545,60 +542,60 @@ const clearPayment = async (req, res, next) => {
             worksheet.mergeCells('A1:L1');
             const titleCell = worksheet.getCell('A1');
             titleCell.value = 'GasChahye Financial Ledger';
-            titleCell.font = {name: 'Arial', size: 16, bold: true, color: {argb: 'FFFFFFFF'}};
-            titleCell.fill = {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FF1E293B'}}; // Dark Slate
-            titleCell.alignment = {horizontal: 'center', vertical: 'middle'};
+            titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+            titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } }; // Dark Slate
+            titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
             worksheet.getRow(1).height = 30;
 
             // --- 2. Summary Formulas (Top Section) ---
             worksheet.mergeCells('A2:L2'); // Spacer
 
             worksheet.getCell('B3').value = 'Summary Overview';
-            worksheet.getCell('B3').font = {bold: true};
+            worksheet.getCell('B3').font = { bold: true };
 
             worksheet.getCell('B4').value = 'Total Pending:';
-            worksheet.getCell('C4').value = {formula: 'SUMIF(J:J,"pending",I:I)'};
+            worksheet.getCell('C4').value = { formula: 'SUMIF(J:J,"pending",I:I)' };
 
             worksheet.getCell('B5').value = 'Total Cleared:';
-            worksheet.getCell('C5').value = {formula: 'SUMIF(J:J,"completed",I:I)'};
+            worksheet.getCell('C5').value = { formula: 'SUMIF(J:J,"completed",I:I)' };
 
             worksheet.getCell('E4').value = 'Generated On:';
             worksheet.getCell('F4').value = new Date();
 
             // Style Summary
-            ['B4', 'B5', 'E4'].forEach(cell => worksheet.getCell(cell).font = {bold: true});
+            ['B4', 'B5', 'E4'].forEach(cell => worksheet.getCell(cell).font = { bold: true });
 
             // --- Helper Function to Create Table ---
             const createTable = (startRow, title, data, headerColor) => {
                 // Table Title
                 const titleRow = worksheet.getRow(startRow);
                 titleRow.getCell(1).value = title;
-                titleRow.getCell(1).font = {size: 12, bold: true, color: {argb: 'FF000000'}};
+                titleRow.getCell(1).font = { size: 12, bold: true, color: { argb: 'FF000000' } };
                 // worksheet.mergeCells(`A${startRow}:L${startRow}`);
 
                 const headerRowIndex = startRow + 1;
                 const columns = [
-                    {header: 'Date', key: 'date', width: 20},
-                    {header: 'Order ID', key: 'orderId', width: 22},
-                    {header: 'Person', key: 'personName', width: 25},
-                    {header: 'Person Type', key: 'personType', width: 12},
-                    {header: 'Phone', key: 'personPhone', width: 15},
-                    {header: 'Tx Type', key: 'type', width: 15},
-                    {header: 'Liability', key: 'liabilityType', width: 15},
-                    {header: 'Details', key: 'details', width: 30},
-                    {header: 'Amount', key: 'amount', width: 15},
-                    {header: 'Status', key: 'status', width: 15},
-                    {header: 'Reference ID', key: 'referenceId', width: 25},
-                    {header: 'System ID', key: 'systemId', width: 30}
+                    { header: 'Date', key: 'date', width: 20 },
+                    { header: 'Order ID', key: 'orderId', width: 22 },
+                    { header: 'Person', key: 'personName', width: 25 },
+                    { header: 'Person Type', key: 'personType', width: 12 },
+                    { header: 'Phone', key: 'personPhone', width: 15 },
+                    { header: 'Tx Type', key: 'type', width: 15 },
+                    { header: 'Liability', key: 'liabilityType', width: 15 },
+                    { header: 'Details', key: 'details', width: 30 },
+                    { header: 'Amount', key: 'amount', width: 15 },
+                    { header: 'Status', key: 'status', width: 15 },
+                    { header: 'Reference ID', key: 'referenceId', width: 25 },
+                    { header: 'System ID', key: 'systemId', width: 30 }
                 ];
 
                 // Set Headers
                 columns.forEach((col, index) => {
                     const cell = worksheet.getCell(headerRowIndex, index + 1);
                     cell.value = col.header;
-                    cell.font = {bold: true, color: {argb: 'FFFFFFFF'}};
-                    cell.fill = {type: 'pattern', pattern: 'solid', fgColor: {argb: headerColor}};
-                    cell.border = {top: {style: 'thin'}, bottom: {style: 'thin'}};
+                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerColor } };
+                    cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' } };
                     worksheet.getColumn(index + 1).width = col.width;
                 });
 
@@ -622,15 +619,15 @@ const clearPayment = async (req, res, next) => {
                     // Status Styling
                     const statusCell = row.getCell(10);
                     if (p.status === 'pending') {
-                        statusCell.font = {color: {argb: 'FFDC2626'}, bold: true};
+                        statusCell.font = { color: { argb: 'FFDC2626' }, bold: true };
                     } else if (p.status === 'completed') {
-                        statusCell.font = {color: {argb: 'FF16A34A'}, bold: true};
+                        statusCell.font = { color: { argb: 'FF16A34A' }, bold: true };
                     }
 
                     // Zebra Striping relative to table
                     if ((currentRow - headerRowIndex) % 2 === 0) {
-                        row.eachCell({includeEmpty: true}, (cell) => {
-                            cell.fill = {type: 'pattern', pattern: 'solid', fgColor: {argb: 'FFF1F5F9'}};
+                        row.eachCell({ includeEmpty: true }, (cell) => {
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
                         });
                     }
 
@@ -688,8 +685,8 @@ const clearPayment = async (req, res, next) => {
                 // Unlock Status (10) and Reference ID (11) if it's a data row
                 // (Check if row has values to avoid unlocking spacer rows)
                 if (row.getCell(1).value) {
-                    row.getCell(10).protection = {locked: false}; // Status
-                    row.getCell(11).protection = {locked: false}; // Reference ID
+                    row.getCell(10).protection = { locked: false }; // Status
+                    row.getCell(11).protection = { locked: false }; // Reference ID
                 }
             }
 
@@ -711,7 +708,7 @@ const clearPayment = async (req, res, next) => {
     const importPayments = async (req, res, next) => {
         try {
             if (!req.file) {
-                return res.status(400).json({success: false, message: 'No file uploaded'});
+                return res.status(400).json({ success: false, message: 'No file uploaded' });
             }
 
             const workbook = new exceljs.Workbook();
@@ -750,16 +747,13 @@ const clearPayment = async (req, res, next) => {
             });
 
             if (updates.length === 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'No valid payment rows found in the uploaded file.'
-                });
+                return res.status(400).json({ success: false, message: 'No valid payment rows found in the uploaded file.' });
             }
 
             let successCount = 0;
 
             const updatePromises = updates.map(async (update) => {
-                const order = await Order.findOne({'paymentTimeline.timelineId': update.timelineId});
+                const order = await Order.findOne({ 'paymentTimeline.timelineId': update.timelineId });
 
                 if (order) {
                     const paymentEntry = order.paymentTimeline.find(p => p.timelineId === update.timelineId);
@@ -814,7 +808,7 @@ const clearPayment = async (req, res, next) => {
         const GoogleSheetService = require('../services/googleSheet.service');
         const rows = await GoogleSheetService.getPaymentRows();
 
-        if (rows.length === 0) return {updated: 0, scanned: 0};
+        if (rows.length === 0) return { updated: 0, scanned: 0 };
 
         let successCount = 0;
         const updates = [];
@@ -835,7 +829,7 @@ const clearPayment = async (req, res, next) => {
         });
 
         const updatePromises = updates.map(async (update) => {
-            const order = await Order.findOne({'paymentTimeline.timelineId': update.timelineId});
+            const order = await Order.findOne({ 'paymentTimeline.timelineId': update.timelineId });
             if (order) {
                 const paymentEntry = order.paymentTimeline.find(p => p.timelineId === update.timelineId);
                 if (paymentEntry) {
@@ -861,7 +855,7 @@ const clearPayment = async (req, res, next) => {
                         if (statusChanged && update.status === 'completed' && !wasCompleted) {
                             try {
                                 const NotificationService = require('../services/notification.service');
-                                const {getIO} = require('../config/socket');
+                                const { getIO } = require('../config/socket');
 
                                 // Create notification for seller
                                 await NotificationService.createNotification(order.seller, {
@@ -929,7 +923,7 @@ const clearPayment = async (req, res, next) => {
                 return res.status(200).json({
                     success: true,
                     message: 'No rows found in Google Sheet or sync disabled.',
-                    meta: {updated: 0}
+                    meta: { updated: 0 }
                 });
             }
 
@@ -966,65 +960,39 @@ const clearPayment = async (req, res, next) => {
     };
 
     // Internal helper to avoid code duplication and allow calling from other exports
-    const _rebuildSheetLogic = async () => {
+    const rebuildSheetLogic = async () => {
         const GoogleSheetService = require('../services/googleSheet.service');
 
-        const pipeline = [{$unwind: '$paymentTimeline'}];
-        pipeline.push({$match: {'paymentTimeline.status': {$in: ['pending', 'completed']}}});
-        pipeline.push({$match: {'paymentTimeline.timelineId': {$exists: true, $ne: null, $ne: ''}}});
+        const pipeline = [{ $unwind: '$paymentTimeline' }];
+        pipeline.push({ $match: { 'paymentTimeline.status': { $in: ['pending', 'completed'] } } });
+        pipeline.push({ $match: { 'paymentTimeline.timelineId': { $exists: true, $ne: null, $ne: '' } } });
 
         pipeline.push({
             $match: {
                 $expr: {
                     $or: [
-                        {$and: [{$ne: ['$paymentTimeline.cause', 'Security Deposits']}, {$ne: ['$paymentTimeline.type', 'delivery_fee']}]},
-                        {$and: [{$in: ['$orderType', ['return']]}, {$or: [{$eq: ['$paymentTimeline.cause', 'Security Deposits']}, {$eq: ['$paymentTimeline.type', 'delivery_fee']}]}]}
+                        { $and: [{ $ne: ['$paymentTimeline.cause', 'Security Deposits'] }, { $ne: ['$paymentTimeline.type', 'delivery_fee'] }] },
+                        { $and: [{ $in: ['$orderType', ['return']] }, { $or: [{ $eq: ['$paymentTimeline.cause', 'Security Deposits'] }, { $eq: ['$paymentTimeline.type', 'delivery_fee'] }] }] }
                     ]
                 }
             }
         });
 
-        pipeline.push({
-            $lookup: {
-                from: 'users',
-                localField: 'paymentTimeline.driverId',
-                foreignField: '_id',
-                as: 'driverDetails'
-            }
-        });
-        pipeline.push({$lookup: {from: 'users', localField: 'seller', foreignField: '_id', as: 'sellerDetails'}});
-        pipeline.push({$lookup: {from: 'users', localField: 'buyer', foreignField: '_id', as: 'buyerDetails'}});
-        pipeline.push({
-            $addFields: {
-                driver: {$arrayElemAt: ['$driverDetails', 0]},
-                sellerInfo: {$arrayElemAt: ['$sellerDetails', 0]},
-                buyerInfo: {$arrayElemAt: ['$buyerDetails', 0]}
-            }
-        });
+        pipeline.push({ $lookup: { from: 'users', localField: 'paymentTimeline.driverId', foreignField: '_id', as: 'driverDetails' } });
+        pipeline.push({ $lookup: { from: 'users', localField: 'seller', foreignField: '_id', as: 'sellerDetails' } });
+        pipeline.push({ $lookup: { from: 'users', localField: 'buyer', foreignField: '_id', as: 'buyerDetails' } });
+        pipeline.push({ $addFields: { driver: { $arrayElemAt: ['$driverDetails', 0] }, sellerInfo: { $arrayElemAt: ['$sellerDetails', 0] }, buyerInfo: { $arrayElemAt: ['$buyerDetails', 0] } } });
 
         pipeline.push({
             $addFields: {
                 resolvedPerson: {
                     $switch: {
                         branches: [
-                            {
-                                case: {$eq: ['$paymentTimeline.type', 'delivery_fee']},
-                                then: {name: '$driver.fullName', type: 'driver', phone: '$driver.phoneNumber'}
-                            },
-                            {
-                                case: {$in: ['$paymentTimeline.type', ['sale', 'seller_payment']]},
-                                then: {
-                                    name: '$sellerInfo.businessName',
-                                    type: 'seller',
-                                    phone: '$sellerInfo.phoneNumber'
-                                }
-                            },
-                            {
-                                case: {$in: ['$paymentTimeline.type', ['refund', 'partial_refund']]},
-                                then: {name: '$buyerInfo.fullName', type: 'buyer', phone: '$buyerInfo.phoneNumber'}
-                            }
+                            { case: { $eq: ['$paymentTimeline.type', 'delivery_fee'] }, then: { name: '$driver.fullName', type: 'driver', phone: '$driver.phoneNumber' } },
+                            { case: { $in: ['$paymentTimeline.type', ['sale', 'seller_payment']] }, then: { name: '$sellerInfo.businessName', type: 'seller', phone: '$sellerInfo.phoneNumber' } },
+                            { case: { $in: ['$paymentTimeline.type', ['refund', 'partial_refund']] }, then: { name: '$buyerInfo.fullName', type: 'buyer', phone: '$buyerInfo.phoneNumber' } }
                         ],
-                        default: {name: 'Unknown', type: 'other', phone: ''}
+                        default: { name: 'Unknown', type: 'other', phone: '' }
                     }
                 }
             }
@@ -1035,16 +1003,16 @@ const clearPayment = async (req, res, next) => {
                 _id: 0,
                 systemId: '$paymentTimeline.timelineId',
                 orderId: '$orderId',
-                date: {$dateToString: {format: "%Y-%m-%d %H:%M", date: "$paymentTimeline.createdAt"}},
-                personName: {$ifNull: ['$resolvedPerson.name', 'N/A']},
+                date: { $dateToString: { format: "%Y-%m-%d %H:%M", date: "$paymentTimeline.createdAt" } },
+                personName: { $ifNull: ['$resolvedPerson.name', 'N/A'] },
                 personType: '$resolvedPerson.type',
-                personPhone: {$ifNull: ['$resolvedPerson.phone', 'N/A']},
+                personPhone: { $ifNull: ['$resolvedPerson.phone', 'N/A'] },
                 type: '$paymentTimeline.type',
                 details: '$paymentTimeline.cause',
                 liabilityType: '$paymentTimeline.liabilityType',
                 amount: '$paymentTimeline.amount',
                 status: '$paymentTimeline.status',
-                referenceId: {$ifNull: ['$paymentTimeline.referenceId', '']}
+                referenceId: { $ifNull: ['$paymentTimeline.referenceId', ''] }
             }
         });
 
@@ -1062,25 +1030,25 @@ const clearPayment = async (req, res, next) => {
             console.log('--- [Webhook Entry] ---');
             console.log('Request Body:', JSON.stringify(req.body, null, 2));
 
-            const {systemId, status, referenceId} = req.body;
+            const { systemId, status, referenceId } = req.body;
 
             if (!systemId) {
                 console.warn('[Webhook] Rejected: Missing systemId');
-                return res.status(400).json({success: false, message: 'Missing systemId'});
+                return res.status(400).json({ success: false, message: 'Missing systemId' });
             }
 
             console.log(`[Webhook] Searching for timelineId: ${systemId}`);
 
-            const order = await Order.findOne({'paymentTimeline.timelineId': systemId});
+            const order = await Order.findOne({ 'paymentTimeline.timelineId': systemId });
             if (!order) {
                 console.error(`[Webhook] Failed: No order found with timelineId ${systemId}`);
-                return res.status(404).json({success: false, message: 'Payment entry not found'});
+                return res.status(404).json({ success: false, message: 'Payment entry not found' });
             }
 
             const paymentEntry = order.paymentTimeline.find(p => p.timelineId === systemId);
             if (!paymentEntry) {
                 console.error(`[Webhook] Failed: Entry found in DB but not in order ${order.orderId}`);
-                return res.status(404).json({success: false, message: 'Entry not found in order'});
+                return res.status(404).json({ success: false, message: 'Entry not found in order' });
             }
 
             let updated = false;
@@ -1127,7 +1095,7 @@ const clearPayment = async (req, res, next) => {
             });
         } catch (error) {
             console.error('[Webhook Error]', error.message);
-            return res.status(500).json({success: false, message: error.message});
+            return res.status(500).json({ success: false, message: error.message });
         }
     };
 
@@ -1140,5 +1108,4 @@ const clearPayment = async (req, res, next) => {
     exports.syncGoogleSheetInternal = syncGoogleSheetInternal;
     exports.rebuildSheet = rebuildSheet;
     exports.syncGoogleSheetWebhook = syncGoogleSheetWebhook;
-    exports._rebuildSheetLogic = _rebuildSheetLogic;
-
+    exports.rebuildSheetLogic = rebuildSheetLogic;

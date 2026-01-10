@@ -6,6 +6,7 @@ const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
 const driverController = require('../controllers/driver.controller');
 const router = express.Router();
+const adminController = require('../controllers/admin.controller');
 
 /**
  * @swagger
@@ -349,6 +350,47 @@ router.post('/Driver-login', driverController.login);
  *         description: Unauthorized, invalid or missing token
  */
 router.get('/driverMe', driverController.getMe);
+
+/**
+ * @swagger
+ * /auth/drivers/reset-password:
+ *   patch:
+ *     summary: Reset a driver's password
+ *     description: Admin can reset a driver's password using their phone number.
+ *     tags: [Driver]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - phoneNumber
+ *               - newPassword
+ *             properties:
+ *               phoneNumber:
+ *                 type: string
+ *                 example: "03001234567"
+ *                 description: Driver's registered phone number
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *                 example: "NewStrongPassword123"
+ *     responses:
+ *       200:
+ *         description: Driver password reset successfully
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: "Driver password reset successfully"
+ *       400:
+ *         description: Invalid input
+ *       404:
+ *         description: Driver not found
+ */
+
+router.patch('/drivers/reset-password', adminController.resetDriverPassword);
 module.exports = router;
 // password:
 //     type: string
