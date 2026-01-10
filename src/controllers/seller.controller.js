@@ -566,6 +566,8 @@ const markOrderReadyForPickup = async (req, res, next) => {
 
     await order.save();
 
+    await NotificationService.sendOrderNotification(order, 'order_assigned');
+
     res.json({
       success: true,
       message: 'Order marked as ready for pickup successfully',

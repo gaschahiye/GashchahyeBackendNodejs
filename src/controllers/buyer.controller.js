@@ -339,7 +339,7 @@ const createOrder = async (req, res, next) => {
       // Emit to seller's room
       const io = require('../config/socket').getIO();
       if (io) {
-        io.to(`seller_${seller} `).emit('new_order_received', {
+        io.to(`seller_${seller}`).emit('new_order_received', {
           orderId: orderDoc._id,
           orderNumber: orderId,
           buyer: req.user._id,
@@ -517,6 +517,9 @@ const requestRefill = async (req, res, next) => {
       }
 
       await order.save({ session });
+
+      // Notify driver (if assigned) and seller
+      await NotificationService.sendOrderNotification(order, driver ? 'refill_pickup' : 'refill_requested');
 
       // ✅ Consolidated Sheet Sync
       // ✅ Consolidated Sheet Sync

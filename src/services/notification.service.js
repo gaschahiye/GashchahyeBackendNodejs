@@ -1,5 +1,5 @@
 const Notification = require('../models/Notification');
-const { getIO } = require('../config/socket');
+const { getIO, emitOrderStatusUpdate } = require('../config/socket');
 
 class NotificationService {
   async createNotification(userId, notificationData) {
@@ -43,9 +43,9 @@ class NotificationService {
       .limit(limit);
 
     const total = await Notification.countDocuments(query);
-    const unreadCount = await Notification.countDocuments({ 
-      user: userId, 
-      isRead: false 
+    const unreadCount = await Notification.countDocuments({
+      user: userId,
+      isRead: false
     });
 
     return {
@@ -109,6 +109,22 @@ class NotificationService {
           message: `Your order ${orderId} is now ${status}.`
         }
       },
+      refill_pickup: {
+        driver: {
+          title: 'New Refill Pickup',
+          message: `You have been assigned to pick up refill order ${orderId}.`
+        },
+        buyer: {
+          title: 'Driver Assigned',
+          message: `Driver assigned for your refill pickup (Order ${orderId}).`
+        }
+      },
+      refill_requested: {
+        seller: {
+          title: 'New Refill Request',
+          message: `Refill requested for order ${orderId}.`
+        }
+      },
       delivery_confirmed: {
         buyer: {
           title: 'Delivery Completed',
@@ -126,11 +142,18 @@ class NotificationService {
     };
 
     const template = notificationTemplates[type];
+
+    // Even if no template found (e.g. just status update without notif), we should emit socket status update
+    // But current logic returns empty notifications array if no template
+
+    // Emit real-time status update regardless of notification creation
+    emitOrderStatusUpdate(order);
+
     if (!template) return notifications;
 
     for (const [role, content] of Object.entries(template)) {
       let userId;
-      
+
       if (role === 'buyer') userId = buyer;
       else if (role === 'seller') userId = seller;
       else if (role === 'driver') userId = driver;

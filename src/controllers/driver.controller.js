@@ -23,12 +23,12 @@ const getAssignedOrders = async (req, res, next) => {
 
     const [orders, total] = await Promise.all([
       Order.find(query)
-          .populate('buyer', 'fullName phoneNumber addresses')
-          .populate('seller', 'businessName phoneNumber')
-          .populate('existingCylinder', 'serialNumber customName')
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(parseInt(limit)),
+        .populate('buyer', 'fullName phoneNumber addresses')
+        .populate('seller', 'businessName phoneNumber')
+        .populate('existingCylinder', 'serialNumber customName')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
 
       Order.countDocuments(query)
     ]);
@@ -61,8 +61,8 @@ const acceptOrder = async (req, res, next) => {
     } = req.body;
 
     const order = await Order.findById(orderId)
-        .populate('buyer')
-        .populate('seller');
+      .populate('buyer')
+      .populate('seller');
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
@@ -80,9 +80,9 @@ const acceptOrder = async (req, res, next) => {
     let cylinderPhotoUrl = null;
     if (cylinderPhoto) {
       cylinderPhotoUrl = await uploadService.uploadImage(
-          Buffer.from(cylinderPhoto, 'base64'),
-          `cylinder-${orderId}.jpg`,
-          'image/jpeg'
+        Buffer.from(cylinderPhoto, 'base64'),
+        `cylinder-${orderId}.jpg`,
+        'image/jpeg'
       );
     }
 
@@ -120,27 +120,27 @@ const acceptOrder = async (req, res, next) => {
     // Update or create Cylinder
     if (order.orderType === 'new') {
       await Cylinder.findOneAndUpdate(
-          { order: orderId },
-          {
-            weights: {
-              tareWeight: parseFloat(tareWeight),
-              netWeight: parseFloat(netWeight),
-              grossWeight: parseFloat(grossWeight),
-              weightDifference: parseFloat(weightDifference)
-            },
-            cylinderPhoto: cylinderPhotoUrl,
-            serialNumber,
-            seller: order.seller._id,
-            SellerName:order.seller.businessName,
-            buyer: order.buyer?._id || null,
-            securityFee: order.pricing.securityCharges,
-            order: order._id,
-            size: order.cylinderSize,
-            currentLocation: cylinderLocation,
-            warehouse: order.warehouse,
-            qrCode: order._id,
+        { order: orderId },
+        {
+          weights: {
+            tareWeight: parseFloat(tareWeight),
+            netWeight: parseFloat(netWeight),
+            grossWeight: parseFloat(grossWeight),
+            weightDifference: parseFloat(weightDifference)
           },
-          { upsert: true, new: true }
+          cylinderPhoto: cylinderPhotoUrl,
+          serialNumber,
+          seller: order.seller._id,
+          SellerName: order.seller.businessName,
+          buyer: order.buyer?._id || null,
+          securityFee: order.pricing.securityCharges,
+          order: order._id,
+          size: order.cylinderSize,
+          currentLocation: cylinderLocation,
+          warehouse: order.warehouse,
+          qrCode: order._id,
+        },
+        { upsert: true, new: true }
 
       );
     }
@@ -163,7 +163,7 @@ const generateQRCode = async (req, res, next) => {
     const { orderId } = req.params;
 
     const order = await Order.findById(orderId);
-    
+
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -211,7 +211,7 @@ const printQRCode = async (req, res, next) => {
     const { orderId } = req.params;
 
     const order = await Order.findById(orderId);
-    
+
     if (!order || order.driver.toString() !== req.user._id.toString()) {
       return res.status(404).json({
         success: false,
@@ -261,7 +261,7 @@ const scanQRCode = async (req, res, next) => {
     }
 
     // Update order status
-    if (['pickup_ready', 'qrgenerated', 'assigned', 'refill_requested','return_requested'].includes(order.status)) {
+    if (['pickup_ready', 'qrgenerated', 'assigned', 'refill_requested', 'return_requested'].includes(order.status)) {
       order.status = 'in_transit';
       order.statusHistory.push({
         status: 'in_transit',
@@ -270,14 +270,15 @@ const scanQRCode = async (req, res, next) => {
       });
 
       await Cylinder.findOneAndUpdate(
-          { order: orderId },
-          { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
+        { order: orderId },
+        { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
       );
 
       await order.save();
+      await NotificationService.sendOrderNotification(order, 'order_status_update');
 
       res.json({ success: true, message: 'Order status updated to in transit', order });
-    }  else if (['in_transit'].includes(order.status) && ['refill'].includes(order.orderType)) {
+    } else if (['in_transit'].includes(order.status) && ['refill'].includes(order.orderType)) {
       order.status = 'refill_in_store';
       order.orderType = 'new';
       order.statusHistory.push({
@@ -287,11 +288,12 @@ const scanQRCode = async (req, res, next) => {
       });
 
       await Cylinder.findOneAndUpdate(
-          { order: orderId },
-          { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
+        { order: orderId },
+        { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
       );
 
       await order.save();
+      await NotificationService.sendOrderNotification(order, 'order_status_update');
 
       res.json({ success: true, message: 'Order status updated to in transit', order });
     }
@@ -305,11 +307,12 @@ const scanQRCode = async (req, res, next) => {
       });
 
       await Cylinder.findOneAndUpdate(
-          { order: orderId },
-          { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
+        { order: orderId },
+        { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
       );
 
       await order.save();
+      await NotificationService.sendOrderNotification(order, 'delivery_confirmed');
 
       res.json({ success: true, message: 'Order status updated to in transit', order });
     }
@@ -323,11 +326,12 @@ const scanQRCode = async (req, res, next) => {
       });
 
       await Cylinder.findOneAndUpdate(
-          { order: orderId },
-          { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
+        { order: orderId },
+        { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
       );
 
       await order.save();
+      await NotificationService.sendOrderNotification(order, 'order_status_update');
 
       res.json({ success: true, message: 'Order status updated to in transit', order });
     }
@@ -446,7 +450,7 @@ const completeDelivery = async (req, res, next) => {
     if (deliveryPhotoUrl) {
       order.deliveryPhoto = deliveryPhotoUrl;
     }
-    
+
     order.statusHistory.push({
       status: 'delivered',
       updatedBy: req.user._id,
@@ -496,14 +500,14 @@ const getDriverDashboard = async (req, res, next) => {
       emptyCylinders,
       todaysOrders
     ] = await Promise.all([
-      Order.countDocuments({ driver: driverId, status:{ $in: ['assigned', 'qrgenerated','accepted'] }  }),
+      Order.countDocuments({ driver: driverId, status: { $in: ['assigned', 'qrgenerated', 'accepted'] } }),
       Order.countDocuments({ driver: driverId, status: { $in: ['in_transit'] } }),
       Order.countDocuments({ driver: driverId, status: 'delivered' }),
       Order.countDocuments({ driver: driverId, orderType: 'return', status: { $in: ['return_requested', 'return_pickup'] } }),
-      Order.countDocuments({ driver: driverId, orderType: 'refill',status :{$in: ['refill_requested']}}), // This might need adjustment
-      Order.find({ 
-        driver: driverId, 
-        createdAt: { $gte: today } 
+      Order.countDocuments({ driver: driverId, orderType: 'refill', status: { $in: ['refill_requested'] } }), // This might need adjustment
+      Order.find({
+        driver: driverId,
+        createdAt: { $gte: today }
       })
         .populate('buyer', 'fullName phoneNumber')
         .populate('seller', 'businessName')
@@ -632,7 +636,7 @@ const getMe = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const user = await User.findById(decoded.userId)
-        .select('-password -refreshToken');
+      .select('-password -refreshToken');
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -641,12 +645,12 @@ const getMe = async (req, res, next) => {
     }
     // We use findById and select to fetch only the necessary driver fields.
     const driver = await User.findById(decoded.userId)
-        .select(
-            'fullName phoneNumber email role isActive isVerified language ' +
-            'vehicleNumber zone autoAssignOrders driverStatus currentLocation fcmToken ' +
-            'cnic' // CNIC is useful for identity verification
-        )
-        .lean(); // .lean() converts the Mongoose document to a plain JavaScript object for performance
+      .select(
+        'fullName phoneNumber email role isActive isVerified language ' +
+        'vehicleNumber zone autoAssignOrders driverStatus currentLocation fcmToken ' +
+        'cnic' // CNIC is useful for identity verification
+      )
+      .lean(); // .lean() converts the Mongoose document to a plain JavaScript object for performance
 
     if (!driver) {
       return res.status(404).json({ success: false, message: 'Driver profile not found' });

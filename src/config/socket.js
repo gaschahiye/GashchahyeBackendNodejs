@@ -146,9 +146,13 @@ const getIO = () => {
 
 const emitOrderStatusUpdate = (order) => {
   if (io) {
-    io.to(`user_${order.buyer}`).emit('order_status_update', order);
-    io.to(`seller_${order.seller}`).emit('order_status_update', order);
-    if (order.driver) io.to(`driver_${order.driver}`).emit('order_status_update', order);
+    const buyerId = order.buyer?._id || order.buyer;
+    const sellerId = order.seller?._id || order.seller;
+    const driverId = order.driver?._id || order.driver;
+
+    if (buyerId) io.to(`user_${buyerId}`).emit('order_status_update', order);
+    if (sellerId) io.to(`seller_${sellerId}`).emit('order_status_update', order);
+    if (driverId) io.to(`driver_${driverId}`).emit('order_status_update', order);
     io.to(`order_tracking_${order._id}`).emit('order_status_update', order);
   }
 };
@@ -168,9 +172,9 @@ const emitSellerApproval = (sellerId, status) => {
     io.to(`seller_approval_${sellerId}`).emit('seller_approval_update', {
       status,
       message:
-          status === 'approved'
-              ? 'Your seller account has been approved!'
-              : 'Your seller account has been rejected.',
+        status === 'approved'
+          ? 'Your seller account has been approved!'
+          : 'Your seller account has been rejected.',
       timestamp: new Date()
     });
   }
