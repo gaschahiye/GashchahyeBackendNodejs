@@ -38,6 +38,8 @@ const initializeSocket = (server) => {
         socket.join(`user_${user._id}`);
         socket.join(`${user.role}_${user._id}`);
 
+        console.log('🔌 DEBUG: Socket joined rooms:', `user_${user._id}`, `${user.role}_${user._id}`);
+
         // NEW: Join admin room if user is admin
         if (user.role === 'admin') {
           socket.join('admin_notifications');
@@ -150,9 +152,21 @@ const emitOrderStatusUpdate = (order) => {
     const sellerId = order.seller?._id || order.seller;
     const driverId = order.driver?._id || order.driver;
 
-    if (buyerId) io.to(`user_${buyerId}`).emit('order_status_update', order);
-    if (sellerId) io.to(`seller_${sellerId}`).emit('order_status_update', order);
-    if (driverId) io.to(`driver_${driverId}`).emit('order_status_update', order);
+    console.log(`📡 DEBUG: emitting status update for order ${order._id} (status: ${order.status})`);
+    console.log(`   Targets -> Buyer: ${buyerId}, Seller: ${sellerId}, Driver: ${driverId}`);
+
+    if (buyerId) {
+      console.log(`   -> Emitting to user_${buyerId}`);
+      io.to(`user_${buyerId}`).emit('order_status_update', order);
+    }
+    if (sellerId) {
+      console.log(`   -> Emitting to seller_${sellerId}`);
+      io.to(`seller_${sellerId}`).emit('order_status_update', order);
+    }
+    if (driverId) {
+      console.log(`   -> Emitting to driver_${driverId}`);
+      io.to(`driver_${driverId}`).emit('order_status_update', order);
+    }
     io.to(`order_tracking_${order._id}`).emit('order_status_update', order);
   }
 };

@@ -518,6 +518,8 @@ const requestRefill = async (req, res, next) => {
 
       await order.save({ session });
 
+      console.log('🌊 DEBUG: Refill requested. Driver:', driver?._id, 'Calling sendOrderNotification...');
+
       // Notify driver (if assigned) and seller
       await NotificationService.sendOrderNotification(order, driver ? 'refill_pickup' : 'refill_requested');
 
