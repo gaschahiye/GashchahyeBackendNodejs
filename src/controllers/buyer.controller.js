@@ -426,83 +426,96 @@ const requestRefill = async (req, res, next) => {
         throw new Error('Cylinder not available for refill');
       }
 
-      // Find original order
-      const order = await Order.findById(cylinder.order).session(session);
-      if (!order) throw new Error('Original order not found');
+      // Find original order (to get location and payment prefs)
+      const originalOrder = await Order.findById(cylinder.order).session(session);
+      if (!originalOrder) throw new Error('Original order not found');
 
       // Find seller inventory
       const inventory = await Inventory.findOne({ seller: cylinder.seller._id }).session(session);
       if (!inventory) throw new Error('Seller inventory not found');
 
-      // Calculate pricing (similar to createOrder logic)
+      // Calculate pricing
       const sizeStr = newSize || cylinder.size;
       const kg = parseFloat(sizeStr.replace('kg', ''));
-
-      // Get cylinder price from inventory
       const cylinderPrice = inventory.cylinders[sizeStr]?.price || 0;
-
-      // If no specific price, calculate using pricePerKg
-      // If no specific price, calculate using pricePerKg
       const computedCylinderPrice = cylinderPrice > 0 ? cylinderPrice : (kg * inventory.pricePerKg);
 
-      // Add sale to payment timeline
-      const refillSaleEntry = {
-        timelineId: new mongoose.Types.ObjectId().toString(),
-        type: 'sale',
-        cause: 'Cylinder Refill Sale',
-        amount: computedCylinderPrice,
-        liabilityType: 'revenue',
-        paymentMethod: order.payment?.method || 'cod', // Inherit or default
-        status: 'pending',
-        driverId: null,
-        createdAt: new Date()
-      };
-      order.paymentTimeline.push(refillSaleEntry);
+      // Delivery charges
+      const isUrgent = originalOrder.isUrgent || false; // Inherit preference? Or default false?
+      // Better to check if user passed isUrgent in body, but body only has cylinderId/newSize. Use default false or inherit.
+      // Let's assume default delivery behavior (standard) unless specified, but previous code used order.isUrgent. 
+      // Safe to default to normal delivery (100) or check if we want to inherit. 
+      // Let's use standard delivery for refills unless we add isUrgent to API.
+      const deliveryCharges = 100;
+      const urgentDeliveryFee = 0;
 
-      // Calculate delivery charges
-      const deliveryCharges = order.isUrgent ? 200 : 100;
+      const subtotal = computedCylinderPrice;
+      const grandTotal = subtotal + deliveryCharges;
 
-      // Delivery fee removed from payment timeline as per user instruction.
+      // Generate NEW Order ID
+      const newOrderId = generateOrderId();
 
-
-      // Update order pricing
-      order.pricing.cylinderPrice = computedCylinderPrice; // Use computedCylinderPrice
-      order.pricing.deliveryCharges = deliveryCharges;
-      order.pricing.subtotal = computedCylinderPrice;
-      order.pricing.grandTotal = computedCylinderPrice + deliveryCharges;
-
-      // Update order type and status
-      order.orderType = 'refill';
-      order.status = 'refill_requested';
-      order.cylinderSize = newSize || cylinder.size;
-      order.statusHistory.push({
+      // Create NEW Order
+      const newOrder = new Order({
+        orderId: newOrderId,
+        buyer: req.user._id,
+        seller: cylinder.seller._id,
+        warehouse: originalOrder.warehouse, // Assuming same warehouse
+        driver: null, // Reset driver, will find new one
+        orderType: 'refill',
+        cylinderSize: sizeStr,
+        quantity: 1, // Refills are usually 1 cylinder
+        existingCylinder: cylinder._id,
+        pickupLocation: originalOrder.pickupLocation, // Copy if exists
+        deliveryLocation: originalOrder.deliveryLocation, // Copy location
+        pricing: {
+          cylinderPrice: computedCylinderPrice,
+          securityCharges: 0,
+          deliveryCharges,
+          urgentDeliveryFee,
+          addOnsTotal: 0,
+          subtotal,
+          grandTotal
+        },
+        payment: {
+          method: originalOrder.payment?.method || 'cod',
+          status: 'pending'
+        },
         status: 'refill_requested',
-        updatedBy: req.user._id
+        statusHistory: [{
+          status: 'refill_requested',
+          updatedBy: req.user._id,
+          timestamp: new Date()
+        }],
+        paymentTimeline: [
+          {
+            timelineId: new mongoose.Types.ObjectId().toString(),
+            type: 'sale',
+            cause: 'Cylinder Refill Sale',
+            amount: computedCylinderPrice,
+            liabilityType: 'revenue',
+            paymentMethod: originalOrder.payment?.method || 'cod',
+            status: 'pending',
+            driverId: null,
+            createdAt: new Date()
+          }
+        ],
+        driverEarnings: []
       });
 
-      // Find driver in zone
-      const driver = await findDriverInZone(order.deliveryLocation.location);
+      // Find driver in zone (using new order's location)
+      const driver = await findDriverInZone(newOrder.deliveryLocation.location);
 
       if (driver) {
-        order.driver = driver._id;
-        order.status = 'refill_pickup';
-        order.statusHistory.push({
+        newOrder.driver = driver._id;
+        newOrder.status = 'refill_pickup';
+        newOrder.statusHistory.push({
           status: 'refill_pickup',
           updatedBy: driver._id
         });
 
-        // Update payment timeline with driver info
-        const timelineIndex = order.paymentTimeline.findIndex(
-          item => item.type === 'delivery_fee' && !item.driverId
-        );
-
-        if (timelineIndex > -1) {
-          order.paymentTimeline[timelineIndex].driverId = driver._id;
-          order.paymentTimeline[timelineIndex].status = 'assigned';
-        }
-
         // Add driver earnings
-        order.driverEarnings.push({
+        newOrder.driverEarnings.push({
           driver: driver._id,
           amount: deliveryCharges,
           status: 'pending',
@@ -516,24 +529,25 @@ const requestRefill = async (req, res, next) => {
         );
       }
 
-      await order.save({ session });
+      await newOrder.save({ session });
 
-      console.log('🌊 DEBUG: Refill requested. Driver:', driver?._id, 'Calling sendOrderNotification...');
+      console.log('🌊 DEBUG: Refill requested. New Order:', newOrderId, 'Driver:', driver?._id);
 
       // Notify driver (if assigned) and seller
-      await NotificationService.sendOrderNotification(order, driver ? 'refill_pickup' : 'refill_requested');
+      // Note: newOrder is passed, so notification will link to new order details
+      await NotificationService.sendOrderNotification(newOrder, driver ? 'refill_pickup' : 'refill_requested');
 
-      // ✅ Consolidated Sheet Sync
-      // ✅ Consolidated Sheet Sync
-      syncOrderTimelineToSheet(order, cylinder.seller, cylinder.buyer);
+      // Sync Sheet
+      syncOrderTimelineToSheet(newOrder, cylinder.seller, cylinder.buyer);
 
-      // Update cylinder status
+      // Update cylinder status AND link to NEW order
       cylinder.status = 'in_refill';
-      cylinder.assignedOrder = order._id;
+      cylinder.order = newOrder._id; // <--- Critical: Point to new order
+      cylinder.assignedOrder = newOrder._id; // Deprecated field? Or alias? Keeping both synced.
       await cylinder.save({ session });
 
       // Prepare response
-      const populated = await Order.findById(order._id)
+      const populated = await Order.findById(newOrder._id)
         .populate({ path: 'driver', select: '_id fullName phoneNumber driverStatus' })
         .populate({ path: 'warehouse', select: 'location city' })
         .session(session);
@@ -690,54 +704,88 @@ const requestReturnAndRate = async (req, res, next) => {
       const cylinder = await Cylinder.findById(cylinderId)
         .populate("seller")
         .populate("buyer")
-        .populate("order")
+        .populate("order") // This will be the current active order
         .session(session);
 
       if (!cylinder || cylinder.buyer._id.toString() !== req.user._id.toString()) {
         throw new Error("Cylinder not found or not yours");
       }
 
-      const order = cylinder.order;
-      if (!order) throw new Error("Order not found");
+      const originalOrder = cylinder.order;
+      if (!originalOrder) throw new Error("Order not found");
 
       // Calculate refund amount (security fee)
-      const securityFee = cylinder.securityFee || order.pricing.securityCharges || 0;
-      const pickupFee = order.isUrgent ? 200 : 100;
+      // If original order had security charges, we refund them (or a policy defined amount).
+      // Assuming full refund of original security charges or default from cylinder property.
+      const securityFee = cylinder.securityFee || originalOrder.pricing.securityCharges || 0;
+      const pickupFee = 100; // Standard pickup logic (was based on isUrgent, defaulting to standard 100)
 
-      // Add Return Event to Payment Timeline
-      const refundEntry = {
-        timelineId: new mongoose.Types.ObjectId().toString(),
-        type: "refund",
-        amount: securityFee,
-        liabilityType: 'liability',
-        status: "pending",
-        driverId: null,
-        createdAt: new Date()
-      };
-      order.paymentTimeline.push(refundEntry);
+      // Generate NEW Order ID
+      const newOrderId = generateOrderId();
 
-      order.status = "return_requested";
-      order.statusHistory.push({
-        status: "return_requested",
-        updatedBy: req.user._id,
+      // Create NEW Order for Return
+      const newOrder = new Order({
+        orderId: newOrderId,
+        buyer: req.user._id,
+        seller: cylinder.seller._id,
+        warehouse: originalOrder.warehouse,
+        driver: null,
+        orderType: 'return',
+        cylinderSize: cylinder.size,
+        quantity: 1,
+        existingCylinder: cylinder._id,
+        pickupLocation: originalOrder.pickupLocation,
+        deliveryLocation: originalOrder.deliveryLocation,
+        pricing: {
+          cylinderPrice: 0,
+          securityCharges: 0, // No new charge
+          deliveryCharges: pickupFee,
+          urgentDeliveryFee: 0,
+          addOnsTotal: 0,
+          subtotal: 0,
+          grandTotal: pickupFee // Only pay for pickup? Or deducted from refund?
+          // Usually refund = Security - PickupFee.
+          // But here strict schema: GrandTotal is usually what buyer PAYS.
+          // If buyer receives money, tracking is in paymentTimeline.
+          // Let's keep GrandTotal as the service cost (pickup fee).
+        },
+        payment: {
+          method: originalOrder.payment?.method || 'cod',
+          status: 'pending'
+        },
+        status: 'return_requested',
+        statusHistory: [{
+          status: 'return_requested',
+          updatedBy: req.user._id,
+          timestamp: new Date()
+        }],
+        paymentTimeline: [
+          {
+            timelineId: new mongoose.Types.ObjectId().toString(),
+            type: 'refund',
+            amount: securityFee,
+            liabilityType: 'liability',
+            status: 'pending',
+            driverId: null,
+            createdAt: new Date()
+          }
+        ],
+        driverEarnings: []
       });
 
-      // Find driver in zone for return pickup
-      const driver = await findDriverInZone(order.deliveryLocation.location);
+      // Find driver in zone
+      const driver = await findDriverInZone(newOrder.deliveryLocation.location);
 
       if (driver) {
-        order.driver = driver._id;
-        order.status = "return_pickup";
-        order.statusHistory.push({
-          status: "return_pickup",
+        newOrder.driver = driver._id;
+        newOrder.status = 'return_pickup';
+        newOrder.statusHistory.push({
+          status: 'return_pickup',
           updatedBy: driver._id,
         });
 
-        // Pickup fee removed from payment timeline. Only in driverEarnings.
-
-
         // Add driver earnings for pickup
-        order.driverEarnings.push({
+        newOrder.driverEarnings.push({
           driver: driver._id,
           amount: pickupFee,
           status: 'pending',
@@ -751,38 +799,45 @@ const requestReturnAndRate = async (req, res, next) => {
         );
       }
 
-      await order.save({ session });
+      await newOrder.save({ session });
 
-      // ✅ Consolidated Sheet Sync
-      // ✅ Consolidated Sheet Sync
-      syncOrderTimelineToSheet(order, cylinder.seller, cylinder.buyer);
+      // Sync Sheet (for the NEW order)
+      syncOrderTimelineToSheet(newOrder, cylinder.seller, cylinder.buyer);
 
       // Update Cylinder
       cylinder.status = "returned";
-      cylinder.assignedOrder = order._id;
+      cylinder.order = newOrder._id; // <--- Point to NEW order
+      cylinder.assignedOrder = newOrder._id;
       await cylinder.save({ session });
 
-      // Create Rating
+      // Create Rating (Linked to ORIGINAL order, as the service/product is being rated)
       const existingRating = await Rating.findOne({
-        order: order._id,
+        order: originalOrder._id,
         buyer: req.user._id,
       }).session(session);
 
       if (existingRating) {
+        // Warning: user might have already rated. 
+        // If strict, throw error: throw new Error("You have already rated this order");
+        // But since we are creating a new return request, maybe we ignore rating if already exists?
+        // Or we update it? 
+        // Logic says "Request Return AND Rate".
+        // If already rated, we just skip rating creation or fail?
+        // The previous code threw error. Sticking to that behavior.
         throw new Error("You have already rated this order");
+      } else {
+        await Rating.create([{
+          order: originalOrder._id,
+          buyer: req.user._id,
+          seller: originalOrder.seller,
+          stars,
+          description,
+          type,
+        }], { session });
       }
 
-      await Rating.create({
-        order: order._id,
-        buyer: req.user._id,
-        seller: order.seller,
-        stars,
-        description,
-        type,
-      });
-
       // Populate response
-      const populated = await Order.findById(order._id)
+      const populated = await Order.findById(newOrder._id)
         .populate({ path: "driver", select: "fullName phoneNumber driverStatus" })
         .populate({ path: "warehouse", select: "location city" })
         .session(session);
@@ -798,6 +853,7 @@ const requestReturnAndRate = async (req, res, next) => {
 
   } catch (error) {
     await session.endSession();
+    console.error(error);
     return res.status(400).json({
       success: false,
       message: error.message || "Something went wrong",
