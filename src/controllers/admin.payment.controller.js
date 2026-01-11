@@ -58,7 +58,7 @@ const getPaymentTimeline = async (req, res, next) => {
                         // Show if it's NOT Security or Delivery
                         {
                             $and: [
-                                { $ne: ['$paymentTimeline.cause', 'Security Deposits'] },
+                                // { $ne: ['$paymentTimeline.cause', 'Security Deposits'] },
                                 { $ne: ['$paymentTimeline.type', 'delivery_fee'] }
                             ]
                         },
@@ -430,7 +430,7 @@ const exportPayments = async (req, res, next) => {
                     $or: [
                         {
                             $and: [
-                                { $ne: ['$paymentTimeline.cause', 'Security Deposits'] },
+                                // { $ne: ['$paymentTimeline.cause', 'Security Deposits'] },
                                 { $ne: ['$paymentTimeline.type', 'delivery_fee'] }
                             ]
                         },
