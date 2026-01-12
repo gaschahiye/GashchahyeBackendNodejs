@@ -308,54 +308,24 @@ const createOrder = async (req, res, next) => {
       .populate('buyer', 'name phoneNumber')
       .populate('seller', 'businessName phoneNumber');
 
-    // ✅ NEW: Notify admin about new order via socket
-    try {
-      // Make sure to import the socket function at the top of your file
-      // const { notifyNewOrder } = require('./socket');
+    // ✅ Centralized Notification (Admin, Seller, Buyer)
+    await NotificationService.sendOrderNotification(responseOrder, 'order_created');
 
-      notifyNewOrder({
-        _id: orderDoc._id,
-        orderId: orderId,
-        orderNumber: orderId, // Using orderId as orderNumber
-        buyer: req.user._id,
-        seller: seller,
-        totalAmount: grandTotal,
-        buyerName: req.user.name || req.user.phoneNumber,
-        sellerName: responseOrder.seller?.businessName || 'Seller',
-        cylinderSize: cylinderSize,
-        quantity: quantity,
-        status: 'pending',
-        createdAt: new Date()
-      });
-
-      console.log(`📢 Socket notification sent for new order: ${orderId} `);
-    } catch (socketError) {
-      console.error('Socket notification error:', socketError);
-      // Don't fail the order creation if socket fails
-    }
-
-    // ✅ Also notify the seller (if they have socket connection)
-    try {
-      // Emit to seller's room
-      const io = require('../config/socket').getIO();
-      if (io) {
-        io.to(`seller_${seller}`).emit('new_order_received', {
-          orderId: orderDoc._id,
-          orderNumber: orderId,
-          buyer: req.user._id,
-          buyerName: req.user.name || req.user.phoneNumber,
-          quantity: quantity,
-          cylinderSize: cylinderSize,
-          totalAmount: grandTotal,
-          status: 'pending',
-          timestamp: new Date()
-        });
-
-        console.log(`📨 Seller notification sent for order: ${orderId} `);
-      }
-    } catch (sellerNotifyError) {
-      console.error('Seller notification error:', sellerNotifyError);
-    }
+    // ✅ Note: notifyNewOrder still handles the specific admin layout logic in config/socket.js
+    notifyNewOrder({
+      _id: orderDoc._id,
+      orderId: orderId,
+      orderNumber: orderId,
+      buyer: req.user._id,
+      seller: seller,
+      totalAmount: grandTotal,
+      buyerName: req.user.name || req.user.phoneNumber,
+      sellerName: responseOrder.seller?.businessName || 'Seller',
+      cylinderSize: cylinderSize,
+      quantity: quantity,
+      status: 'pending',
+      createdAt: new Date()
+    });
 
     // ✅ Consolidated Sheet Sync
     syncOrderTimelineToSheet(responseOrder, responseOrder.seller, responseOrder.buyer);
@@ -841,6 +811,9 @@ const requestReturnAndRate = async (req, res, next) => {
         .populate({ path: "driver", select: "fullName phoneNumber driverStatus" })
         .populate({ path: "warehouse", select: "location city" })
         .session(session);
+
+      // Notify driver (if assigned) and seller
+      await NotificationService.sendOrderNotification(newOrder, driver ? 'return_pickup' : 'return_requested');
 
       return res.status(200).json({
         success: true,

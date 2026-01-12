@@ -121,12 +121,44 @@ class NotificationService {
                 buyer: {
                     title: 'Driver Assigned',
                     message: `Driver assigned for your refill pickup (Order ${orderId}).`
+                },
+                seller: {
+                    title: 'Refill Pickup Scheduled',
+                    message: `A driver has been assigned to pick up refill order ${orderId}.`
                 }
             },
             refill_requested: {
                 seller: {
                     title: 'New Refill Request',
                     message: `Refill requested for order ${orderId}.`
+                },
+                buyer: {
+                    title: 'Refill Received',
+                    message: `Your refill request ${orderId} has been received.`
+                }
+            },
+            return_requested: {
+                seller: {
+                    title: 'New Return Request',
+                    message: `Return requested for order ${orderId}.`
+                },
+                buyer: {
+                    title: 'Return Received',
+                    message: `Your return request ${orderId} has been received.`
+                }
+            },
+            return_pickup: {
+                driver: {
+                    title: 'New Return Pickup',
+                    message: `You have been assigned to pick up return order ${orderId}.`
+                },
+                seller: {
+                    title: 'Return Pickup Scheduled',
+                    message: `A driver has been assigned to pick up return order ${orderId}.`
+                },
+                buyer: {
+                    title: 'Driver Assigned',
+                    message: `Driver assigned for your return pickup (Order ${orderId}).`
                 }
             },
             delivery_confirmed: {
