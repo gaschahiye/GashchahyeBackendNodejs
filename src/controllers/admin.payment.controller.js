@@ -282,6 +282,15 @@ const getPaymentTimeline = async (req, res, next) => {
                                         0
                                     ]
                                 }
+                            },
+                            companyRevenue: {
+                                $sum: {
+                                    $cond: [
+                                        { $in: ['$paymentType', ['delivery_fee', 'pickup_fee']] },
+                                        '$amount',
+                                        0
+                                    ]
+                                }
                             }
                         }
                     }
@@ -303,7 +312,10 @@ const getPaymentTimeline = async (req, res, next) => {
             pendingSellerPayments: 0,
             pendingRefunds: 0,
             totalAmount: 0,
-            totalRefundAmount: 0
+            pendingRefunds: 0,
+            totalAmount: 0,
+            totalRefundAmount: 0,
+            companyRevenue: 0
         };
 
         res.json({
@@ -316,7 +328,8 @@ const getPaymentTimeline = async (req, res, next) => {
                     completed: statsObj.clearedCount
                 },
                 refundAmount: statsObj.totalRefundAmount,
-                totalAmount: statsObj.totalAmount
+                totalAmount: statsObj.totalAmount,
+                companyRevenue: statsObj.companyRevenue
             },
             pagination: {
                 currentPage: metadata.page,

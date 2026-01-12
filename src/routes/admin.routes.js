@@ -648,6 +648,7 @@ const upload = multer({ storage: storage });
  *                     clearedCount: { type: number }
  *                     refundAmount: { type: number }
  *                     totalAmount: { type: number }
+ *                     companyRevenue: { type: number }
  *                 pagination:
  *                   type: object
  *                   properties:

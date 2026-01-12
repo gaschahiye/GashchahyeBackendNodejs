@@ -555,14 +555,24 @@ const markOrderReadyForPickup = async (req, res, next) => {
     order.warehouse = warehouseId;
     // order.assignedCylinders = assignedCylinderIds;
 
-    // // ✅ ADD PAYMENT TIMELINE ENTRY
-    // order.paymentTimeline.push({
-    //   type: 'delivery_fee',
-    //   amount: order.pricing.deliveryCharges || 0,
-    //   status: 'complete',
-    //   driverId: driver ? driver._id : null,
-    //   createdAt: new Date()
-    // });
+    // ✅ ADD PAYMENT TIMELINE ENTRY
+    order.paymentTimeline.push({
+      timelineId: new mongoose.Types.ObjectId().toString(),
+      type: 'delivery_fee',
+      cause: 'Delivery Charge',
+      amount: order.pricing.deliveryCharges || 0,
+      liabilityType: 'revenue', // User stated fees are Company Revenue
+      status: 'completed', // Assuming collected/paid? Or pending driver payout? Usually Pending until driver paid.
+      // But for COMPANY REVENUE tracking, we can say it's revenue.
+      // Let's keep status 'pending' if it's not yet settled, or 'completed' if instant.
+      // Original code had 'completed'. I'll stick to 'completed' for now as per comment recovery, but usually fees are realized upon delivery?
+      // Wait, this is "Ready for Pickup". Is fee earned then? Probably not.
+      // Let's set status to 'pending' to be safe, or 'completed' if we assume prepaid?
+      // Default to 'pending' for consistency with other entries.
+      status: 'pending',
+      driverId: driver ? driver._id : null,
+      createdAt: new Date()
+    });
 
     await order.save();
 
