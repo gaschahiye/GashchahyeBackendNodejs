@@ -521,60 +521,19 @@ const exportPayments = async (req, res, next) => {
 
         const payments = await Order.aggregate(pipeline);
 
-        // Separate Pending and Completed (Case-Insensitive)
-        const pendingPayments = payments.filter(p => p.status?.toLowerCase() === 'pending');
-        const completedPayments = payments.filter(p => p.status?.toLowerCase() === 'completed');
+        // Separate Ledger vs Refunds
+        const refundTypes = ['refund', 'partial_refund'];
+        const ledgerPayments = payments.filter(p => !refundTypes.includes(p.type));
+        const refundPaymentsOnly = payments.filter(p => refundTypes.includes(p.type));
 
         const workbook = new exceljs.Workbook();
-        const worksheet = workbook.addWorksheet('GasChahye Ledger');
-
-        // --- 1. Branding & Title ---
-        worksheet.mergeCells('A1:L1');
-        const titleCell = worksheet.getCell('A1');
-        titleCell.value = 'GasChahye Financial Ledger';
-        titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } }; // Dark Slate
-        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-        worksheet.getRow(1).height = 30;
-
-        // --- 2. Summary Formulas (Top Section) ---
-        worksheet.mergeCells('A2:L2'); // Spacer
-
-        worksheet.getCell('B3').value = 'Summary Overview';
-        worksheet.getCell('B3').font = { bold: true };
-
-        // Row 4
-        worksheet.getCell('B4').value = 'Total Amount:';
-        worksheet.getCell('C4').value = { formula: 'SUM(I:I)' };
-
-        worksheet.getCell('E4').value = 'Pending Amount:';
-        worksheet.getCell('F4').value = { formula: 'SUMIF(J:J,"pending",I:I)' };
-
-        // Row 5
-        worksheet.getCell('B5').value = 'Cleared Amount:';
-        worksheet.getCell('C5').value = { formula: 'SUMIF(J:J,"completed",I:I)' };
-
-        worksheet.getCell('E5').value = 'Refund Amount:';
-        // Assuming refunds are positive values in the amount col but type is 'refund' or 'partial_refund' (Col F is type)
-        // Or if refunds are stored as negative? Usually amounts are absolute. 
-        // Formula: SUMIFS(I:I, F:F, "refund") + SUMIFS(I:I, F:F, "partial_refund")
-        // Note: F:F is the 'Tx Type' column (index 6).
-        worksheet.getCell('F5').value = { formula: 'SUMIFS(I:I,F:F,"refund") + SUMIFS(I:I,F:F,"partial_refund")' };
-
-
-        worksheet.getCell('H4').value = 'Generated On:';
-        worksheet.getCell('I4').value = new Date();
-
-        // Style Summary
-        ['B4', 'B5', 'E4', 'E5', 'H4'].forEach(cell => worksheet.getCell(cell).font = { bold: true });
 
         // --- Helper Function to Create Table ---
-        const createTable = (startRow, title, data, headerColor) => {
+        const createTable = (ws, startRow, title, data, headerColor) => {
             // Table Title
-            const titleRow = worksheet.getRow(startRow);
+            const titleRow = ws.getRow(startRow);
             titleRow.getCell(1).value = title;
             titleRow.getCell(1).font = { size: 12, bold: true, color: { argb: 'FF000000' } };
-            // worksheet.mergeCells(`A${startRow}:L${startRow}`);
 
             const headerRowIndex = startRow + 1;
             const columns = [
@@ -594,18 +553,18 @@ const exportPayments = async (req, res, next) => {
 
             // Set Headers
             columns.forEach((col, index) => {
-                const cell = worksheet.getCell(headerRowIndex, index + 1);
+                const cell = ws.getCell(headerRowIndex, index + 1);
                 cell.value = col.header;
                 cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerColor } };
                 cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' } };
-                worksheet.getColumn(index + 1).width = col.width;
+                ws.getColumn(index + 1).width = col.width;
             });
 
             // Populate Data
             let currentRow = headerRowIndex + 1;
             data.forEach(p => {
-                const row = worksheet.getRow(currentRow);
+                const row = ws.getRow(currentRow);
                 row.getCell(1).value = p.date;
                 row.getCell(2).value = p.orderId;
                 row.getCell(3).value = p.personName;
@@ -651,47 +610,81 @@ const exportPayments = async (req, res, next) => {
             return currentRow; // Return next available row
         };
 
-        // --- 3. Render Tables ---
+        const addSheetHeader = (ws, title) => {
+            ws.mergeCells('A1:L1');
+            const titleCell = ws.getCell('A1');
+            titleCell.value = title;
+            titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+            titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+            titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+            ws.getRow(1).height = 30;
+
+            ws.mergeCells('A2:L2'); // Spacer
+            ws.getCell('B3').value = 'Summary Overview';
+            ws.getCell('B3').font = { bold: true };
+
+            // Row 4
+            ws.getCell('B4').value = 'Total Amount:';
+            ws.getCell('C4').value = { formula: `SUM('${ws.name}'!I:I)` };
+
+            ws.getCell('E4').value = 'Pending Amount:';
+            ws.getCell('F4').value = { formula: `SUMIF('${ws.name}'!J:J,"pending",'${ws.name}'!I:I)` };
+
+            // Row 5
+            ws.getCell('B5').value = 'Cleared Amount:';
+            ws.getCell('C5').value = { formula: `SUMIF('${ws.name}'!J:J,"completed",'${ws.name}'!I:I)` };
+
+            ws.getCell('H4').value = 'Generated On:';
+            ws.getCell('I4').value = new Date();
+            ['B4', 'B5', 'E4', 'H4'].forEach(cell => ws.getCell(cell).font = { bold: true });
+        };
+
+        // --- 3. Render Main Ledger ---
+        const wsLedger = workbook.addWorksheet('GasChahye Ledger');
+        addSheetHeader(wsLedger, 'GasChahye Financial Ledger');
+
+        const pendingLedger = ledgerPayments.filter(p => p.status?.toLowerCase() === 'pending');
+        const completedLedger = ledgerPayments.filter(p => p.status?.toLowerCase() === 'completed');
 
         let nextRow = 7;
+        nextRow = createTable(wsLedger, nextRow, 'PENDING LEDGER', pendingLedger, 'FFEA580C');
+        nextRow += 2;
+        nextRow = createTable(wsLedger, nextRow, 'COMPLETED HISTORY', completedLedger, 'FF0F172A');
 
-        // PENDING TABLE (Orange Header)
-        if (pendingPayments.length > 0) { // Render even if empty? User might prefer seeing the section. Let's render always or just if data. 
-            // Better to always show headers so they know it exists.
-        }
-        nextRow = createTable(nextRow, 'PENDING PAYMENTS', pendingPayments, 'FFEA580C'); // Orange
+        // --- 4. Render Refunds Sheet ---
+        const wsRefunds = workbook.addWorksheet('Refunds Ledger');
+        addSheetHeader(wsRefunds, 'GasChahye Refunds Ledger');
 
-        nextRow += 2; // Spacer
+        const pendingRefunds = refundPaymentsOnly.filter(p => p.status?.toLowerCase() === 'pending');
+        const completedRefunds = refundPaymentsOnly.filter(p => p.status?.toLowerCase() === 'completed');
 
-        // COMPLETED TABLE (Green Header or Blue? Blue for distinction)
-        nextRow = createTable(nextRow, 'COMPLETED HISTORY', completedPayments, 'FF0F172A'); // Dark Blue
+        let refundRow = 7;
+        refundRow = createTable(wsRefunds, refundRow, 'PENDING REFUNDS', pendingRefunds, 'FFDC2626');
+        refundRow += 2;
+        refundRow = createTable(wsRefunds, refundRow, 'COMPLETED REFUNDS', completedRefunds, 'FF16A34A');
 
-        // --- 4. Protection & Locking ---
-        // Protect the sheet with a password (optional, or empty string for no pass but active protection)
-        // This makes all cells Read-Only by default unless explicitly unlocked.
-        await worksheet.protect('GasChahyeSecret', {
-            selectLockedCells: true,
-            selectUnlockedCells: true,
-            formatCells: true,
-            formatColumns: true,
-            formatRows: true,
-            sort: true,
-            autoFilter: true,
-        });
-
-        // Unlock Editable Columns for the rows we created
-        // Columns 10 (Status) and 11 (Reference ID) should be editable.
-        // We iterate from row 8 (first data row) to nextRow (last row used).
-        for (let i = 8; i < nextRow; i++) {
-            const row = worksheet.getRow(i);
-
-            // Unlock Status (10) and Reference ID (11) if it's a data row
-            // (Check if row has values to avoid unlocking spacer rows)
-            if (row.getCell(1).value) {
-                row.getCell(10).protection = { locked: false }; // Status
-                row.getCell(11).protection = { locked: false }; // Reference ID
+        // --- 5. Protection & Locking ---
+        const protectSheet = async (ws, lastRow) => {
+            await ws.protect('GasChahyeSecret', {
+                selectLockedCells: true,
+                selectUnlockedCells: true,
+                formatCells: true,
+                formatColumns: true,
+                formatRows: true,
+                sort: true,
+                autoFilter: true,
+            });
+            for (let i = 8; i < lastRow; i++) {
+                const row = ws.getRow(i);
+                if (row.getCell(1).value) {
+                    row.getCell(10).protection = { locked: false };
+                    row.getCell(11).protection = { locked: false };
+                }
             }
-        }
+        };
+
+        await protectSheet(wsLedger, nextRow);
+        await protectSheet(wsRefunds, refundRow);
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename=GasChahye_Ledger.xlsx');
