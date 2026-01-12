@@ -361,24 +361,18 @@ const clearPayment = async (req, res, next) => {
                 type: 'payment_success',
                 relatedOrder: order._id
             });
-
-            // Emit socket event to seller
-
-
-            res.json({
-                success: true,
-                message: 'Payment cleared successfully',
-                payment: timelineEntry
-            });
-
-        } catch (error) {
-            next(error);
+        } catch (innerError) {
+            console.error('[Notification Error]', innerError.message);
         }
-    }
-    catch (e) {
 
+        res.json({
+            success: true,
+            message: 'Payment cleared successfully',
+            payment: timelineEntry
+        });
+    } catch (error) {
         next(error);
-    };
+    }
 };
 
 /**
@@ -396,33 +390,6 @@ const exportPayments = async (req, res, next) => {
         pipeline.push({
             $match: {
                 'paymentTimeline.timelineId': { $exists: true, $ne: null, $ne: '' }
-            }
-        });
-
-        // ✅ FILTER: Conditional Display for Security & Delivery
-        pipeline.push({
-            $match: {
-                $expr: {
-                    $or: [
-                        {
-                            $and: [
-                                // { $ne: ['$paymentTimeline.cause', 'Security Deposits'] },
-                                { $ne: ['$paymentTimeline.type', 'delivery_fee'] }
-                            ]
-                        },
-                        {
-                            $and: [
-                                { $in: ['$orderType', ['return']] },
-                                {
-                                    $or: [
-                                        { $eq: ['$paymentTimeline.cause', 'Security Deposits'] },
-                                        { $eq: ['$paymentTimeline.type', 'delivery_fee'] }
-                                    ]
-                                }
-                            ]
-                        }
-                    ]
-                }
             }
         });
 
@@ -530,7 +497,6 @@ const exportPayments = async (req, res, next) => {
 
         // --- Helper Function to Create Table ---
         const createTable = (ws, startRow, title, data, headerColor) => {
-            // Table Title
             const titleRow = ws.getRow(startRow);
             titleRow.getCell(1).value = title;
             titleRow.getCell(1).font = { size: 12, bold: true, color: { argb: 'FF000000' } };
@@ -578,7 +544,6 @@ const exportPayments = async (req, res, next) => {
                 row.getCell(11).value = p.referenceId;
                 row.getCell(12).value = p.systemId;
 
-                // Status Styling
                 const statusCell = row.getCell(10);
                 if (p.status === 'pending') {
                     statusCell.font = { color: { argb: 'FFDC2626' }, bold: true };
@@ -586,14 +551,12 @@ const exportPayments = async (req, res, next) => {
                     statusCell.font = { color: { argb: 'FF16A34A' }, bold: true };
                 }
 
-                // Zebra Striping relative to table
                 if ((currentRow - headerRowIndex) % 2 === 0) {
                     row.eachCell({ includeEmpty: true }, (cell) => {
                         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
                     });
                 }
 
-                // Add Dropdown to Status
                 statusCell.dataValidation = {
                     type: 'list',
                     allowBlank: false,
@@ -603,11 +566,9 @@ const exportPayments = async (req, res, next) => {
                     errorTitle: 'Invalid Status',
                     error: 'Status must be either "pending" or "completed"'
                 };
-
                 currentRow++;
             });
-
-            return currentRow; // Return next available row
+            return currentRow;
         };
 
         const addSheetHeader = (ws, title) => {
@@ -619,51 +580,45 @@ const exportPayments = async (req, res, next) => {
             titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
             ws.getRow(1).height = 30;
 
-            ws.mergeCells('A2:L2'); // Spacer
+            ws.mergeCells('A2:L2');
             ws.getCell('B3').value = 'Summary Overview';
             ws.getCell('B3').font = { bold: true };
 
-            // Row 4
             ws.getCell('B4').value = 'Total Amount:';
-            ws.getCell('C4').value = { formula: `SUM('${ws.name}'!I:I)` };
+            ws.getCell('C4').value = { formula: `SUM(${ws.name}!I:I)` };
 
             ws.getCell('E4').value = 'Pending Amount:';
-            ws.getCell('F4').value = { formula: `SUMIF('${ws.name}'!J:J,"pending",'${ws.name}'!I:I)` };
+            ws.getCell('F4').value = { formula: `SUMIF(${ws.name}!J:J,"pending",${ws.name}!I:I)` };
 
-            // Row 5
             ws.getCell('B5').value = 'Cleared Amount:';
-            ws.getCell('C5').value = { formula: `SUMIF('${ws.name}'!J:J,"completed",'${ws.name}'!I:I)` };
+            ws.getCell('C5').value = { formula: `SUMIF(${ws.name}!J:J,"completed",${ws.name}!I:I)` };
 
             ws.getCell('H4').value = 'Generated On:';
             ws.getCell('I4').value = new Date();
             ['B4', 'B5', 'E4', 'H4'].forEach(cell => ws.getCell(cell).font = { bold: true });
         };
 
-        // --- 3. Render Main Ledger ---
-        const wsLedger = workbook.addWorksheet('GasChahye Ledger');
+        // --- 1. Ledger Sheet ---
+        const wsLedger = workbook.addWorksheet('Ledger');
         addSheetHeader(wsLedger, 'GasChahye Financial Ledger');
-
         const pendingLedger = ledgerPayments.filter(p => p.status?.toLowerCase() === 'pending');
         const completedLedger = ledgerPayments.filter(p => p.status?.toLowerCase() === 'completed');
-
         let nextRow = 7;
         nextRow = createTable(wsLedger, nextRow, 'PENDING LEDGER', pendingLedger, 'FFEA580C');
         nextRow += 2;
         nextRow = createTable(wsLedger, nextRow, 'COMPLETED HISTORY', completedLedger, 'FF0F172A');
 
-        // --- 4. Render Refunds Sheet ---
-        const wsRefunds = workbook.addWorksheet('Refunds Ledger');
-        addSheetHeader(wsRefunds, 'GasChahye Refunds Ledger');
-
+        // --- 2. Refunds Sheet ---
+        const wsRefunds = workbook.addWorksheet('Refunds');
+        addSheetHeader(wsRefunds, 'GasChahye Refunds History');
         const pendingRefunds = refundPaymentsOnly.filter(p => p.status?.toLowerCase() === 'pending');
         const completedRefunds = refundPaymentsOnly.filter(p => p.status?.toLowerCase() === 'completed');
-
         let refundRow = 7;
         refundRow = createTable(wsRefunds, refundRow, 'PENDING REFUNDS', pendingRefunds, 'FFDC2626');
         refundRow += 2;
         refundRow = createTable(wsRefunds, refundRow, 'COMPLETED REFUNDS', completedRefunds, 'FF16A34A');
 
-        // --- 5. Protection & Locking ---
+        // --- 3. Protection ---
         const protectSheet = async (ws, lastRow) => {
             await ws.protect('GasChahyeSecret', {
                 selectLockedCells: true,
@@ -682,20 +637,18 @@ const exportPayments = async (req, res, next) => {
                 }
             }
         };
-
         await protectSheet(wsLedger, nextRow);
         await protectSheet(wsRefunds, refundRow);
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename=GasChahye_Ledger.xlsx');
-
         await workbook.xlsx.write(res);
         res.end();
-
     } catch (error) {
         next(error);
     }
 };
+
 
 /**
  * Import Payments from Excel (Update Status)
