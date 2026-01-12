@@ -49,36 +49,6 @@ const getPaymentTimeline = async (req, res, next) => {
             }
         });
 
-        // ✅ FILTER: Conditional Display for Security & Delivery
-        // "Dont show Security Deposits and delivery fee unitl the order type is return"
-        pipeline.push({
-            $match: {
-                $expr: {
-                    $or: [
-                        // Show if it's NOT Security or Delivery
-                        {
-                            $and: [
-                                // { $ne: ['$paymentTimeline.cause', 'Security Deposits'] },
-                                { $ne: ['$paymentTimeline.type', 'delivery_fee'] }
-                            ]
-                        },
-                        // OR Show if it IS Security/Delivery BUT Order Type is 'return'
-                        {
-                            $and: [
-                                { $in: ['$orderType', ['return']] },
-                                {
-                                    $or: [
-                                        { $eq: ['$paymentTimeline.cause', 'Security Deposits'] },
-                                        { $eq: ['$paymentTimeline.type', 'delivery_fee'] }
-                                    ]
-                                }
-                            ]
-                        }
-                    ]
-                }
-            }
-        });
-
         // Lookup Driver
         pipeline.push({
             $lookup: {
@@ -150,6 +120,15 @@ const getPaymentTimeline = async (req, res, next) => {
                                     phone: '$buyerInfo.phoneNumber',
                                     personId: '$buyerInfo._id'
                                 }
+                            },
+                            {
+                                case: { $in: ['$paymentTimeline.type', ['pickup_fee', 'other', 'security_deposit']] },
+                                then: {
+                                    name: 'Platform/Admin',
+                                    type: 'admin',
+                                    phone: 'N/A',
+                                    personId: null
+                                }
                             }
                         ],
                         default: {
@@ -213,14 +192,7 @@ const getPaymentTimeline = async (req, res, next) => {
         // Facet for Stats and Data
         pipeline.push({
             $facet: {
-                data: [
-                    { $skip: (parseInt(page) - 1) * parseInt(limit) },
-                    { $limit: parseInt(limit) }
-                ],
-                metadata: [
-                    { $count: 'total' },
-                    { $addFields: { page: parseInt(page), limit: parseInt(limit) } }
-                ],
+                data: [], // No skip/limit = all data
                 stats: [
                     {
                         $group: {
@@ -301,7 +273,6 @@ const getPaymentTimeline = async (req, res, next) => {
         const result = await Order.aggregate(pipeline);
 
         const data = result[0].data || [];
-        const metadata = result[0].metadata[0] || { total: 0, page, limit };
         const statsObj = result[0].stats[0] || {
             totalPending: 0,
             amountToSellers: 0,
@@ -310,8 +281,6 @@ const getPaymentTimeline = async (req, res, next) => {
             pendingCount: 0,
             clearedCount: 0,
             pendingSellerPayments: 0,
-            pendingRefunds: 0,
-            totalAmount: 0,
             pendingRefunds: 0,
             totalAmount: 0,
             totalRefundAmount: 0,
@@ -330,12 +299,6 @@ const getPaymentTimeline = async (req, res, next) => {
                 refundAmount: statsObj.totalRefundAmount,
                 totalAmount: statsObj.totalAmount,
                 companyRevenue: statsObj.companyRevenue
-            },
-            pagination: {
-                currentPage: metadata.page,
-                totalPages: Math.ceil(metadata.total / metadata.limit),
-                totalEntries: metadata.total,
-                hasNext: (metadata.page * metadata.limit) < metadata.total
             }
         });
     } catch (error) {
