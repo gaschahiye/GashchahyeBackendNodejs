@@ -301,7 +301,7 @@ exports.getOrdersOverview = async (req, res, next) => {
       dateFrom,
       dateTo,
       page = 1,
-      limit = 20,
+      limit = 0, // Default to 0 (all/unlimited)
       sellerId, // Alias
       driverId, // Alias
       buyerId,  // Alias
@@ -371,7 +371,16 @@ exports.getOrdersOverview = async (req, res, next) => {
       .lean();
 
     // Handle pagination: if limit is 'all' or 0, do not skip/limit
-    const limitVal = limit === 'all' ? 0 : parseInt(limit);
+    // Explicitly check for 'all' string or standard number parsing
+    let limitVal = 0;
+    if (limit !== 'all' && limit !== 0) {
+      limitVal = parseInt(limit);
+      if (isNaN(limitVal)) limitVal = 0;
+    }
+
+    // If user passed a number > 0, we apply pagination. 
+    // If default (0) or 'all', limitVal stays 0 -> no skip/limit calls.
+
     const pageVal = parseInt(page);
 
     if (limitVal > 0) {
