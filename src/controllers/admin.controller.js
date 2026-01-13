@@ -344,53 +344,73 @@ exports.getOrdersOverview = async (req, res, next) => {
         query.$or = [
           { orderId: { $regex: search, $options: 'i' } },
           { invoiceNumber: { $regex: search, $options: 'i' } },
-          { 'deliveryLocation.address': { $regex: search, $options: 'i' } }
+          { 'deliveryLocation.address': { $regex: search, $options: 'i' } },
+          { 'buyer.fullName': { $regex: search, $options: 'i' } }, // Assuming lookups if we were doing aggregation, but for simple find this won't work on virtuals/refs directly effectively without aggregate. Kept simple for now as per original.
         ];
       }
     }
 
-    // Since this logic is quite specific and complex (search, aliases), maybe we keep it here or move it to service later.
-    // For now, let's keep the logic inline as it was in the original file, but use standard mongoose calls as per previous 'fat controller' or use service if we updated service.
-    // The previous service implementation didn't have all these filters.
-    // To be safe and compliant with "do not break existing backend", let's replicate the logic cleanly here or extend the service.
-    // I will implementation the logic here to guarantee behavior matches the "fat" version shown in the context, but cleanly.
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
     const sort = {};
     sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
+    let ordersQuery = Order.find(query)
+      .populate('buyer', 'fullName phoneNumber')
+      .populate('seller', 'businessName phoneNumber email')
+      .populate('driver', 'fullName vehicleNumber phoneNumber')
+      .populate('warehouse', 'name address')
+      .populate('existingCylinder', 'serialNumber weight')
+      .populate({
+        path: 'paymentTimeline.processedBy',
+        select: 'fullName businessName phoneNumber role'
+      })
+      .populate({
+        path: 'paymentTimeline.driverId',
+        select: 'fullName vehicleNumber phoneNumber'
+      })
+      .sort(sort)
+      .lean();
+
+    // Handle pagination: if limit is 'all' or 0, do not skip/limit
+    const limitVal = limit === 'all' ? 0 : parseInt(limit);
+    const pageVal = parseInt(page);
+
+    if (limitVal > 0) {
+      const skip = (pageVal - 1) * limitVal;
+      ordersQuery = ordersQuery.skip(skip).limit(limitVal);
+    }
+
     const [orders, total] = await Promise.all([
-      Order.find(query)
-        .populate('buyer', 'fullName phoneNumber')
-        .populate('seller', 'businessName phoneNumber email')
-        .populate('driver', 'fullName vehicleNumber phoneNumber')
-        .populate('warehouse', 'name address')
-        .populate('existingCylinder', 'serialNumber weight')
-        .sort(sort)
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean(),
+      ordersQuery,
       Order.countDocuments(query)
     ]);
 
-    // Calculate summary
-    // (This was in the cut-off part of the previous file, assuming standard summary)
-    const summary = await Order.aggregate([
+    // Enhanced Summary Aggregation
+    const summaryAggregation = await Order.aggregate([
       { $match: query },
       {
         $group: {
           _id: null,
           totalOrders: { $sum: 1 },
           totalRevenue: { $sum: '$pricing.grandTotal' },
+
+          // Payment Status Breakdowns
           completedRevenue: {
-            $sum: {
-              $cond: [{ $eq: ['$payment.status', 'completed'] }, '$pricing.grandTotal', 0]
-            }
+            $sum: { $cond: [{ $eq: ['$payment.status', 'completed'] }, '$pricing.grandTotal', 0] }
           },
           pendingRevenue: {
-            $sum: {
-              $cond: [{ $eq: ['$payment.status', 'pending'] }, '$pricing.grandTotal', 0]
-            }
+            $sum: { $cond: [{ $eq: ['$payment.status', 'pending'] }, '$pricing.grandTotal', 0] }
+          },
+
+          // Detailed Pricing Breakdowns
+          totalDeliveryCharges: { $sum: '$pricing.deliveryCharges' },
+          totalSecurityCharges: { $sum: '$pricing.securityCharges' },
+          totalUrgentFees: { $sum: '$pricing.urgentDeliveryFee' },
+          totalAddOnsValue: { $sum: '$pricing.addOnsTotal' },
+
+          // Cylinder Base Cost (approximate as Subtotal - Addons)
+          // Or strictly quantity * cylinderPrice
+          totalCylinderBasePrice: {
+            $sum: { $multiply: ['$pricing.cylinderPrice', '$quantity'] }
           }
         }
       }
@@ -403,7 +423,17 @@ exports.getOrdersOverview = async (req, res, next) => {
       { $project: { status: '$_id', count: 1, _id: 0 } }
     ]);
 
-    const stats = summary[0] || { totalOrders: 0, totalRevenue: 0, completedRevenue: 0, pendingRevenue: 0 };
+    const stats = summaryAggregation[0] || {
+      totalOrders: 0,
+      totalRevenue: 0,
+      completedRevenue: 0,
+      pendingRevenue: 0,
+      totalDeliveryCharges: 0,
+      totalSecurityCharges: 0,
+      totalUrgentFees: 0,
+      totalAddOnsValue: 0,
+      totalCylinderBasePrice: 0
+    };
 
     res.json({
       success: true,
@@ -418,12 +448,12 @@ exports.getOrdersOverview = async (req, res, next) => {
         },
         statusDistribution,
         pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(total / parseInt(limit)),
+          currentPage: limitVal > 0 ? pageVal : 1,
+          totalPages: limitVal > 0 ? Math.ceil(total / limitVal) : 1,
           totalOrders: total,
-          limit: parseInt(limit),
-          hasNext: (page * limit) < total,
-          hasPrev: page > 1
+          limit: limitVal > 0 ? limitVal : total,
+          hasNext: limitVal > 0 ? (pageVal * limitVal) < total : false,
+          hasPrev: limitVal > 0 ? pageVal > 1 : false
         }
       }
     });
