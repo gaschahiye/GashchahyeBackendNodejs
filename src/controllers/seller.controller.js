@@ -463,43 +463,16 @@ const getOrders = async (req, res, next) => {
 
     const skip = (page - 1) * limit;
 
-    const [ordersData, total] = await Promise.all([
+    const [orders, total] = await Promise.all([
       Order.find(query)
         .populate('buyer', 'fullName phoneNumber addresses')
         .populate('driver', 'fullName vehicleNumber phoneNumber')
         .populate('existingCylinder', 'serialNumber customName')
-        // ✅ Populate warehouse to get inventory details (including addOns definitions)
-        .populate({
-          path: 'warehouse',
-          select: 'location city addOns'
-        })
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit))
-        .lean(), // ✅ Convert to plain objects for modification
+        .limit(parseInt(limit)),
       Order.countDocuments(query)
     ]);
-
-    // ✅ Resolve AddOn Names (if titles are IDs)
-    const orders = ordersData.map(order => {
-      if (order.addOns && order.addOns.length > 0 && order.warehouse && order.warehouse.addOns) {
-        order.addOns = order.addOns.map(orderAddon => {
-          // Find matching addOn definition in inventory
-          const inventoryAddon = order.warehouse.addOns.find(
-            invAddon => invAddon._id.toString() === orderAddon.title // Assuming title holds the ID
-          );
-
-          if (inventoryAddon) {
-            return {
-              ...orderAddon,
-              title: inventoryAddon.title // Replace ID with actual name
-            };
-          }
-          return orderAddon;
-        });
-      }
-      return order;
-    });
 
     res.json({
       success: true,
@@ -750,7 +723,10 @@ const getDashboardStats = async (req, res, next) => {
     }));
 
     // 4️⃣ Active cylinders
-    const activeCylinders = await Order.find({ seller: sellerId, status: 'pickup_ready' })
+    const activeCylinders = await Order.find({
+      seller: sellerId,
+      status: { $nin: ['pending', 'returned', 'cancelled'] }
+    })
       .populate({
         path: 'warehouse',            // 1️⃣ from Order to Inventory
         populate: {
