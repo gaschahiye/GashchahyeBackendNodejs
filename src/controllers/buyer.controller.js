@@ -492,13 +492,13 @@ const requestRefill = async (req, res, next) => {
         newOrder.driverEarnings.push({
           driver: driver._id,
           amount: deliveryCharges,
-          status: 'pending',
+          status: 'completed',
           createdAt: new Date()
         });
 
         await User.updateOne(
           { _id: driver._id },
-          { $set: { driverStatus: 'busy' } },
+          { $set: { driverStatus: 'available' } },
           { session }
         );
       }
@@ -766,7 +766,7 @@ const requestReturnAndRate = async (req, res, next) => {
         newOrder.driverEarnings.push({
           driver: driver._id,
           amount: pickupFee,
-          status: 'pending',
+          status: 'completed',
           createdAt: new Date()
         });
 
@@ -842,7 +842,7 @@ const requestReturnAndRate = async (req, res, next) => {
   }
 };
 
-const findDriverByZone = async (location, session = null) => {
+const findDriverInZone = async (location, session = null) => {
   try {
     const drivers = await User.find({
       role: 'driver',
