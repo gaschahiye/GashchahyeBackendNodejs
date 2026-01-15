@@ -476,6 +476,10 @@ const requestRefill = async (req, res, next) => {
       // Find driver in zone (using new order's location)
       const driver = await findDriverInZone(newOrder.deliveryLocation.location);
 
+      if (!driver) {
+        throw new Error('No driver available in your zone. Please wait until a driver becomes available.');
+      }
+
       if (driver) {
         newOrder.driver = driver._id;
         newOrder.status = 'refill_pickup';
@@ -745,6 +749,10 @@ const requestReturnAndRate = async (req, res, next) => {
 
       // Find driver in zone
       const driver = await findDriverInZone(newOrder.deliveryLocation.location);
+
+      if (!driver) {
+        throw new Error('No driver available in your zone. Please wait until a driver becomes available.');
+      }
 
       if (driver) {
         newOrder.driver = driver._id;
