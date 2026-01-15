@@ -482,11 +482,12 @@ const requestRefill = async (req, res, next) => {
 
       if (driver) {
         newOrder.driver = driver._id;
-        newOrder.status = 'refill_pickup';
+        newOrder.status = 'refill_requested';
         newOrder.statusHistory.push({
           status: 'refill_pickup',
           updatedBy: driver._id
         });
+
 
         // Add driver earnings
         newOrder.driverEarnings.push({
@@ -756,7 +757,7 @@ const requestReturnAndRate = async (req, res, next) => {
 
       if (driver) {
         newOrder.driver = driver._id;
-        newOrder.status = 'return_pickup';
+        newOrder.status = 'return_requested';
         newOrder.statusHistory.push({
           status: 'return_pickup',
           updatedBy: driver._id,
