@@ -846,7 +846,7 @@ const findDriverInZone = async (location) => {
   try {
     const drivers = await User.find({
       role: 'driver',
-      driverStatus: 'available',
+      // driverStatus: 'available',
       autoAssignOrders: true,
       zone: {
         $exists: true,
