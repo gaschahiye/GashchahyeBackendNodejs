@@ -51,14 +51,7 @@ const getAssignedOrders = async (req, res, next) => {
 const acceptOrder = async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const {
-      cylinderPhoto,
-      tareWeight,
-      netWeight,
-      grossWeight,
-      serialNumber,
-      weightDifference
-    } = req.body;
+    const { cylinders } = req.body; // Expecting an array of cylinder objects
 
     const order = await Order.findById(orderId)
       .populate('buyer')
@@ -76,74 +69,96 @@ const acceptOrder = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Order cannot be accepted in current status' });
     }
 
-    // Upload cylinder photo if provided
-    let cylinderPhotoUrl = null;
-    if (cylinderPhoto) {
-      cylinderPhotoUrl = await uploadService.uploadImage(
-        Buffer.from(cylinderPhoto, 'base64'),
-        `cylinder-${orderId}.jpg`,
-        'image/jpeg'
-      );
+    if (!cylinders || !Array.isArray(cylinders) || cylinders.length === 0) {
+      return res.status(400).json({ success: false, message: 'Please provide at least one cylinder verification' });
     }
 
-    // Update order with cylinder verification
-    order.cylinderVerification = {
-      photo: cylinderPhotoUrl,
-      tareWeight: parseFloat(tareWeight),
-      netWeight: parseFloat(netWeight),
-      grossWeight: parseFloat(grossWeight),
-      serialNumber,
-      weightDifference: parseFloat(weightDifference),
-      verifiedAt: new Date()
-    };
-    order.status = 'accepted';
-    order.statusHistory.push({
-      status: 'accepted',
-      updatedBy: req.user._id,
-      notes: 'Driver verified cylinder and accepted the order'
-    });
+    // Reset verification array
+    order.cylinderVerification = [];
 
-    order.qrCode = orderId;
-    await order.save();
-
-    // Determine currentLocation for the cylinder
+    // Determine cylinder location (common for all)
     let cylinderLocation = {
       type: 'Point',
       coordinates: [0, 0] // fallback
     };
-
     if (order.deliveryLocation?.location?.coordinates?.length === 2) {
-
       cylinderLocation.coordinates = order.deliveryLocation.location.coordinates;
     }
 
-    // Update or create Cylinder
-    if (order.orderType === 'new') {
-      await Cylinder.findOneAndUpdate(
-        { order: orderId },
-        {
-          weights: {
-            tareWeight: parseFloat(tareWeight),
-            netWeight: parseFloat(netWeight),
-            grossWeight: parseFloat(grossWeight),
-            weightDifference: parseFloat(weightDifference)
-          },
-          cylinderPhoto: cylinderPhotoUrl,
-          serialNumber,
-          seller: order.seller._id,
-          SellerName: order.seller.businessName,
-          buyer: order.buyer?._id || null,
-          securityFee: order.pricing.securityCharges,
-          order: order._id,
-          size: order.cylinderSize,
-          currentLocation: cylinderLocation,
-          warehouse: order.warehouse,
-          qrCode: order._id,
-        },
-        { upsert: true, new: true }
+    // Calculate security fee per cylinder
+    const perCylinderSecurity = order.quantity > 0
+      ? (order.pricing.securityCharges / order.quantity)
+      : order.pricing.securityCharges;
 
-      );
+    // Iterate over cylinders
+    for (const [index, cyl] of cylinders.entries()) {
+      const {
+        cylinderPhoto,
+        tareWeight,
+        netWeight,
+        grossWeight,
+        serialNumber,
+        weightDifference
+      } = cyl;
+
+      // Upload cylinder photo if provided
+      let cylinderPhotoUrl = null;
+      if (cylinderPhoto) {
+        cylinderPhotoUrl = await uploadService.uploadImage(
+          Buffer.from(cylinderPhoto, 'base64'),
+          `cylinder-${orderId}-${index + 1}.jpg`,
+          'image/jpeg'
+        );
+      }
+
+      // Add to verification array
+      order.cylinderVerification.push({
+        photo: cylinderPhotoUrl,
+        tareWeight: parseFloat(tareWeight),
+        netWeight: parseFloat(netWeight),
+        grossWeight: parseFloat(grossWeight),
+        serialNumber,
+        weightDifference: parseFloat(weightDifference),
+        verifiedAt: new Date()
+      });
+
+      // Update or create Cylinder if it's a new order
+      if (order.orderType === 'new') {
+        await Cylinder.findOneAndUpdate(
+          { serialNumber: serialNumber },
+          {
+            weights: {
+              tareWeight: parseFloat(tareWeight),
+              netWeight: parseFloat(netWeight),
+              grossWeight: parseFloat(grossWeight),
+              weightDifference: parseFloat(weightDifference)
+            },
+            cylinderPhoto: cylinderPhotoUrl,
+            // serialNumber is in filter
+            seller: order.seller._id,
+            SellerName: order.seller.businessName,
+            buyer: order.buyer?._id || null,
+            securityFee: perCylinderSecurity,
+            order: order._id,
+            size: order.cylinderSize,
+            currentLocation: cylinderLocation,
+            warehouse: order.warehouse,
+            qrCode: `${order._id}-${index + 1}`, // Generate unique QR for each cylinder
+          },
+          { upsert: true, new: true }
+        );
+      }
     }
+
+    order.status = 'accepted';
+    order.statusHistory.push({
+      status: 'accepted',
+      updatedBy: req.user._id,
+      notes: `Driver verified ${cylinders.length} cylinders and accepted the order`
+    });
+
+    order.qrCode = orderId;
+    await order.save();
 
     await NotificationService.sendOrderNotification(order, 'order_status_update');
 

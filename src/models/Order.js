@@ -147,7 +147,7 @@ const orderSchema = new mongoose.Schema({
   },
   qrCodePrintedAt: Date,
   qrCodeScannedAt: Date,
-  cylinderVerification: {
+  cylinderVerification: [{
     photo: String,
     tareWeight: Number,
     netWeight: Number,
@@ -155,7 +155,7 @@ const orderSchema = new mongoose.Schema({
     serialNumber: String,
     weightDifference: Number,
     verifiedAt: Date
-  },
+  }],
   payment: {
     method: {
       type: String,
