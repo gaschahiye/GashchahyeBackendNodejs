@@ -789,31 +789,31 @@ const requestReturnAndRate = async (req, res, next) => {
       cylinder.assignedOrder = newOrder._id;
       await cylinder.save({ session });
 
-      // Create Rating (Linked to ORIGINAL order, as the service/product is being rated)
-      const existingRating = await Rating.findOne({
+      // // Create Rating (Linked to ORIGINAL order, as the service/product is being rated)
+      // const existingRating = await Rating.findOne({
+      //   order: originalOrder._id,
+      //   buyer: req.user._id,
+      // }).session(session);
+
+      // if (existingRating) {
+      //   // Warning: user might have already rated. 
+      //   // If strict, throw error: throw new Error("You have already rated this order");
+      //   // But since we are creating a new return request, maybe we ignore rating if already exists?
+      //   // Or we update it? 
+      //   // Logic says "Request Return AND Rate".
+      //   // If already rated, we just skip rating creation or fail?
+      //   // The previous code threw error. Sticking to that behavior.
+      //   throw new Error("You have already rated this order");
+      // } else {
+      await Rating.create([{
         order: originalOrder._id,
         buyer: req.user._id,
-      }).session(session);
-
-      if (existingRating) {
-        // Warning: user might have already rated. 
-        // If strict, throw error: throw new Error("You have already rated this order");
-        // But since we are creating a new return request, maybe we ignore rating if already exists?
-        // Or we update it? 
-        // Logic says "Request Return AND Rate".
-        // If already rated, we just skip rating creation or fail?
-        // The previous code threw error. Sticking to that behavior.
-        throw new Error("You have already rated this order");
-      } else {
-        await Rating.create([{
-          order: originalOrder._id,
-          buyer: req.user._id,
-          seller: originalOrder.seller,
-          stars,
-          description,
-          type,
-        }], { session });
-      }
+        seller: originalOrder.seller,
+        stars,
+        description,
+        type,
+      }], { session });
+      // }
 
       // Populate response
       const populated = await Order.findById(newOrder._id)
