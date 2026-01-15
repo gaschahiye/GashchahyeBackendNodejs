@@ -843,6 +843,7 @@ const requestReturnAndRate = async (req, res, next) => {
 };
 
 const findDriverInZone = async (location, session = null) => {
+  console.log(location);
   try {
     const drivers = await User.find({
       role: 'driver',
