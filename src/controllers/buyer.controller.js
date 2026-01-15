@@ -842,58 +842,63 @@ const requestReturnAndRate = async (req, res, next) => {
   }
 };
 
-const findDriverInZone = async (location) => {
+const findDriverByZone = async (location, session = null) => {
   try {
     const drivers = await User.find({
       role: 'driver',
-      // driverStatus: 'available',
       autoAssignOrders: true,
-      zone: {
-        $exists: true,
-        $ne: null
-      }
-    });
+      driverStatus: 'available',
+      driverStatus: { $in: ['available', 'online'] } // Consider both available and online
+    }).session(session || null);
 
-    // Find driver whose zone contains the location
+    if (!drivers.length) return null;
+
+    // Find driver whose zone includes the delivery location
     for (const driver of drivers) {
-      if (driver.zone && driver.zone.coordinates) {
-        const point = {
-          type: 'Point',
-          coordinates: [location.coordinates[0], location.coordinates[1]]
-        };
+      if (!driver.zone || !driver.zone.centerPoint) continue;
 
-        // Simple polygon containment check (for demonstration)
-        // In production, use proper geospatial queries with MongoDB
-        const polygon = driver.zone.coordinates[0];
-        if (isPointInPolygon(point.coordinates, polygon)) {
-          return driver;
-        }
+      const driverLocation = {
+        type: 'Point',
+        coordinates: [driver.zone.centerPoint.longitude, driver.zone.centerPoint.latitude]
+      };
+
+      // Check if the delivery location is within driver's zone radius
+      const distance = calculateDistance(
+        driverLocation.coordinates[1],  // latitude
+        driverLocation.coordinates[0],  // longitude
+        location.coordinates[1],        // delivery latitude
+        location.coordinates[0]         // delivery longitude
+      );
+
+      if (distance <= (driver.zone.radiusKm || 10)) { // Default 10km radius
+        return driver;
       }
     }
+
     return null;
   } catch (error) {
-    console.error('Error finding driver in zone:', error);
+    console.error('Error finding driver by zone:', error);
     return null;
   }
 };
 
-// Helper function for point-in-polygon check
-const isPointInPolygon = (point, polygon) => {
-  const x = point[0], y = point[1];
-  let inside = false;
+// // Helper function for point-in-polygon check
+// const isPointInPolygon = (point, polygon) => {
+//   const x = point[0], y = point[1];
+//   let inside = false;
 
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i][0], yi = polygon[i][1];
-    const xj = polygon[j][0], yj = polygon[j][1];
+//   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+//     const xi = polygon[i][0], yi = polygon[i][1];
+//     const xj = polygon[j][0], yj = polygon[j][1];
 
-    const intersect = ((yi > y) !== (yj > y)) &&
-      (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+//     const intersect = ((yi > y) !== (yj > y)) &&
+//       (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
 
-    if (intersect) inside = !inside;
-  }
+//     if (intersect) inside = !inside;
+//   }
 
-  return inside;
-};
+//   return inside;
+// };
 
 
 /**
