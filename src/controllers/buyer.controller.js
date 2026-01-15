@@ -492,7 +492,7 @@ const requestRefill = async (req, res, next) => {
         newOrder.driverEarnings.push({
           driver: driver._id,
           amount: deliveryCharges,
-          status: 'completed',
+          status: 'paid',
           createdAt: new Date()
         });
 
@@ -766,13 +766,13 @@ const requestReturnAndRate = async (req, res, next) => {
         newOrder.driverEarnings.push({
           driver: driver._id,
           amount: pickupFee,
-          status: 'completed',
+          status: 'paid',
           createdAt: new Date()
         });
 
         await User.updateOne(
           { _id: driver._id },
-          { $set: { driverStatus: 'busy' } },
+          { $set: { driverStatus: 'available' } },
           { session }
         );
       }
@@ -914,9 +914,11 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 
 
 /**
+ * 
  * Internal helper to sync order timeline entries to Google Sheet
  * Handles person resolution and filtering 1:1 with Admin Ledger logic
  */
+
 async function syncOrderTimelineToSheet(order, sellerInfo, buyerInfo) {
   try {
     const GoogleSheetService = require('../services/googleSheet.service');
