@@ -444,7 +444,7 @@ const getOrders = async (req, res, next) => {
           query.status = 'refill_requested';
           break;
         case 'inprocess':
-          query.status = { $in: ['in_transit', 'pickup_ready'] };
+          query.status = { $in: ['in_transit', 'pickup_ready', 'assigned'] };
           break;
         case 'delivered':
           query.status = 'delivered';
@@ -653,14 +653,22 @@ const markOrderReadyForPickup = async (req, res, next) => {
         status: 'paid', // or pending
         createdAt: new Date()
       });
+      // ✅ CHANGE: Status becomes 'assigned' if driver is found
+      order.status = 'assigned';
+      order.statusHistory.push({
+        status: 'assigned',
+        updatedBy: req.user._id,
+        notes: 'Seller marked ready & Driver assigned'
+      });
+    } else {
+      // No driver found, waiting for one
+      order.status = 'pickup_ready';
+      order.statusHistory.push({
+        status: 'pickup_ready',
+        updatedBy: req.user._id,
+        notes: 'Seller marked order ready for pickup (No driver yet)'
+      });
     }
-
-    order.status = 'pickup_ready';
-    order.statusHistory.push({
-      status: 'pickup_ready',
-      updatedBy: req.user._id,
-      notes: 'Seller marked order ready for pickup'
-    });
 
     // Add delivery fee to timeline if not there? 
     // Usually added at creation for New Orders? 
