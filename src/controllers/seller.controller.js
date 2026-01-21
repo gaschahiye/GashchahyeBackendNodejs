@@ -567,9 +567,9 @@ const approveRefill = async (req, res, next) => {
         status: 'paid', // or pending
         createdAt: new Date()
       });
-      order.status = 'pickup_ready'; // Refill accepted/ready
+      order.status = 'assigned'; // Refill accepted/ready
       order.statusHistory.push({
-        status: 'pickup_ready',
+        status: 'assigned',
         updatedBy: req.user._id,
         notes: 'Seller approved refill and driver assigned'
       });

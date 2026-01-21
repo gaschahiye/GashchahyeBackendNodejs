@@ -268,7 +268,7 @@ const scanQRCode = async (req, res, next) => {
     }
 
     // --- PHASE 1: PICKUP AT SELLER (or Fresh Cylinder Scan) ---
-    if (['pickup_ready', 'refill_accepted', 'orders_assigned'].includes(order.status)) {
+    if (['pickup_ready', 'refill_accepted', 'assigned', 'qrgenerated'].includes(order.status)) {
       // Driver is scanning the FRESH cylinder at the seller's warehouse
       // We expect `qrCode` to remain on the cylinder (Permanent ID) OR Order QR if stickers used
       // But per new design, we assume they scan the ORDER QR to confirm pickup? 
