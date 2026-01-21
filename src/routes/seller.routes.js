@@ -832,9 +832,11 @@ router.get('/orders', sellerController.getOrders);
  *                   type: string
  *                   example: Order not found or unauthorized
  */
+// ✅ NEW ORDERS: Mark Ready (No inventory deduction, just driver assignment)
+router.patch('/orders/:orderId/ready', sellerController.markOrderReadyForPickup);
 
 // Replaced by approveRefill
-router.put(
+router.patch(
     '/orders/:orderId/approve',
     validate(sellerValidators.markReady),
     sellerController.approveRefill

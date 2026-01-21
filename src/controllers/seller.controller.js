@@ -399,7 +399,6 @@ const updateInventoryQuantity = async (req, res, next) => {
 };
 
 // ==================== CYLINDER & ORDER CONTROLLERS ====================
-
 const getActiveCylindersMap = async (req, res, next) => {
   try {
     const cylinders = await Cylinder.find({
@@ -430,7 +429,7 @@ const getActiveCylindersMap = async (req, res, next) => {
 
 const getOrders = async (req, res, next) => {
   try {
-    const { status, page = 1, limit = 5000000000000 } = req.query;
+    const { status, page = 1, limit = 50 } = req.query;
     const query = { seller: req.user._id };
 
     // --------------------------------------------------
@@ -496,27 +495,35 @@ const approveRefill = async (req, res, next) => {
     const { orderId } = req.params;
     const { warehouseId, notes } = req.body;
 
+    console.log(`🔍 DEBUG: approveRefill called for Order ${orderId}`);
+    console.log(`   Seller: ${sellerId}, Warehouse: ${warehouseId}`);
+
     const order = await Order.findOne({ orderId: orderId, seller: sellerId })
       .populate('warehouse', 'location city')
       .populate('buyer', 'fullName phoneNumber');
 
     if (!order) {
+      console.log('❌ DEBUG: Order not found or unauthorized');
       return res.status(404).json({
         success: false,
         message: 'Order not found or unauthorized'
       });
     }
 
-    // Only allow approval if status is 'refill_requested' OR 'pending' (for new orders)
-    if (!['refill_requested', 'pending'].includes(order.status)) {
+    console.log(`   Order Status: ${order.status}`);
+
+    // Only allow approval if status is 'refill_requested'
+    if (order.status !== 'refill_requested') {
+      console.log('❌ DEBUG: Invalid status for approveRefill');
       return res.status(400).json({
         success: false,
-        message: 'Order cannot be approved in current status'
+        message: 'This endpoint is for refill requests only. Use /ready for new orders.'
       });
     }
 
     const inventory = await Inventory.findOne({ _id: warehouseId, seller: sellerId });
     if (!inventory) {
+      console.log('❌ DEBUG: Warehouse inventory not found');
       return res.status(404).json({
         success: false,
         message: 'Warehouse not found for this seller'
@@ -525,7 +532,10 @@ const approveRefill = async (req, res, next) => {
 
     // Check inventory stock
     const availableQty = inventory.cylinders[order.cylinderSize]?.quantity || 0;
+    console.log(`   Inventory Check: Size ${order.cylinderSize}, Available: ${availableQty}, Required: ${order.quantity}`);
+
     if (availableQty < order.quantity) {
+      console.log('❌ DEBUG: Insufficient stock');
       return res.status(400).json({
         success: false,
         message: 'Not enough filled cylinders available in this warehouse'
@@ -536,10 +546,12 @@ const approveRefill = async (req, res, next) => {
     inventory.issuedCylinders = (inventory.issuedCylinders || 0) + order.quantity;
     inventory.cylinders[order.cylinderSize].quantity = availableQty - order.quantity;
     await inventory.save();
+    console.log('✅ DEBUG: Inventory stock deducted');
 
     // ✅ ADD DRIVER ASSIGNMENT BASED ON ZONE
     const driver = await findDriverByZone(order.deliveryLocation.location);
     if (driver) {
+      console.log(`✅ DEBUG: Driver assigned: ${driver._id}`);
       order.driver = driver._id;
 
       // Update driver status
@@ -562,10 +574,7 @@ const approveRefill = async (req, res, next) => {
         notes: 'Seller approved refill and driver assigned'
       });
     } else {
-      // No driver found - what to do?
-      // For now, accept it but stay in 'pickup_ready' or a specific 'waiting_for_driver' state?
-      // Let's set to 'pickup_ready' and admin/driver can pick it up later?
-      // Or fail? Best to allow Seller to Mark Ready, and Driver finds it later.
+      console.log('⚠️ DEBUG: No driver found in zone');
       order.status = 'pickup_ready';
       order.statusHistory.push({
         status: 'pickup_ready',
@@ -589,6 +598,7 @@ const approveRefill = async (req, res, next) => {
     });
 
     await order.save();
+    console.log('✅ DEBUG: Order status updated to pickup_ready');
 
     // Notify Driver (if assigned) and Buyer
     const notifyEvent = driver ? 'refill_pickup' : 'order_assigned'; // reuse 'order_assigned' for generic 'ready'
@@ -604,7 +614,82 @@ const approveRefill = async (req, res, next) => {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error('❌ DEBUG: Exception in approveRefill:', error);
+    next(error);
+  }
+};
+
+const markOrderReadyForPickup = async (req, res, next) => {
+  try {
+    const sellerId = req.user._id;
+    const { orderId } = req.params;
+    // For new orders, 'warehouseId' is usually already in order.warehouse
+    // But if provided, we could validate it.
+
+    const order = await Order.findOne({ orderId: orderId, seller: sellerId })
+      .populate('warehouse', 'location city')
+      .populate('buyer', 'fullName phoneNumber');
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (order.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Only pending orders can be marked ready' });
+    }
+
+    // Inventory was ALREADY deducted during createOrder.
+    // We just need to assign driver and move status.
+
+    // ✅ ADD DRIVER ASSIGNMENT BASED ON ZONE
+    const driver = await findDriverByZone(order.deliveryLocation.location);
+
+    if (driver) {
+      order.driver = driver._id;
+      // Assign Driver Earnings
+      order.driverEarnings.push({
+        driver: driver._id,
+        amount: order.pricing.deliveryCharges,
+        status: 'paid', // or pending
+        createdAt: new Date()
+      });
+    }
+
+    order.status = 'pickup_ready';
+    order.statusHistory.push({
+      status: 'pickup_ready',
+      updatedBy: req.user._id,
+      notes: 'Seller marked order ready for pickup'
+    });
+
+    // Add delivery fee to timeline if not there? 
+    // Usually added at creation for New Orders? 
+    // Let's check createOrder... it DOES NOT add delivery fee to paymentTimeline, only gas sale.
+    // So we add it here.
+    order.paymentTimeline.push({
+      timelineId: new mongoose.Types.ObjectId().toString(),
+      type: 'delivery_fee',
+      cause: 'Delivery Charge',
+      amount: order.pricing.deliveryCharges || 0,
+      liabilityType: 'revenue',
+      status: 'pending',
+      driverId: driver ? driver._id : null,
+      createdAt: new Date()
+    });
+
+    await order.save();
+
+    // Notify
+    const notifyEvent = driver ? 'order_assigned' : 'order_status_update';
+    await NotificationService.sendOrderNotification(order, notifyEvent);
+
+    res.json({
+      success: true,
+      message: 'Order marked ready for pickup',
+      order
+    });
+
+  } catch (error) {
     next(error);
   }
 };
@@ -1128,6 +1213,7 @@ module.exports = {
   getActiveCylindersMap,
   getOrders,
   approveRefill,
+  markOrderReadyForPickup,
   generateInvoice,
   getDashboardStats,
   getSellerProfile,
