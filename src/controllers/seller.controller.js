@@ -521,7 +521,7 @@ const approveRefill = async (req, res, next) => {
       });
     }
 
-    const inventory = await Inventory.findOne({ _id: warehouseId, seller: sellerId });
+    const inventory = await Inventory.findOne({ locationid: warehouseId, seller: sellerId });
     if (!inventory) {
       console.log('❌ DEBUG: Warehouse inventory not found');
       return res.status(404).json({
