@@ -751,11 +751,10 @@ router.get('/orders', sellerController.getOrders);
 
 /**
  * @swagger
- * /seller/orders/{orderId}/ready:
- *   patch:
- *     summary: Mark an order as ready for pickup
- *     description: This endpoint marks a seller's order as ready for pickup.
- *                  It validates inventory availability, assigns cylinders, updates the order status, and returns the assigned cylinder details.
+ * /seller/orders/{orderId}/approve:
+ *   put:
+ *     summary: Approve a refill request (Mark as ready)
+ *     description: This endpoint allows a seller to approve a refill request, assigning a driver and marking it as pickup_ready.
  *     tags:
  *       - Seller
  *     security:
@@ -764,11 +763,11 @@ router.get('/orders', sellerController.getOrders);
  *       - in: path
  *         name: orderId
  *         required: true
- *         description: The ID of the order to mark as ready
+ *         description: The ID of the order to approve
  *         schema:
  *           type: string
  *     requestBody:
- *       description: Additional data for marking the order ready
+ *       description: Warehouse selection and notes
  *       required: true
  *       content:
  *         application/json:
@@ -777,38 +776,12 @@ router.get('/orders', sellerController.getOrders);
  *             properties:
  *               warehouseId:
  *                 type: string
- *                 description: The ID of the warehouse from which cylinders will be assigned
  *               notes:
  *                 type: string
- *                 description: Optional notes from the seller regarding the order
  *             required:
  *               - warehouseId
  *     responses:
  *       200:
- *         description: Order marked as ready for pickup successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Order marked as ready for pickup successfully
- *                 data:
- *                   type: object
- *                   properties:
- *                     orderId:
- *                       type: string
- *                       description: The MongoDB ID of the order
- *                     warehouse:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: string
- *                           description: Warehouse ID
  *                         name:
  *                           type: string
  *                           description: Warehouse location name
@@ -860,10 +833,11 @@ router.get('/orders', sellerController.getOrders);
  *                   example: Order not found or unauthorized
  */
 
-router.patch(
-    '/orders/:orderId/ready',
+// Replaced by approveRefill
+router.put(
+    '/orders/:orderId/approve',
     validate(sellerValidators.markReady),
-    sellerController.markOrderReadyForPickup
+    sellerController.approveRefill
 );
 
 /**

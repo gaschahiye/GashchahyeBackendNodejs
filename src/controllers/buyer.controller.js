@@ -410,12 +410,6 @@ const requestRefill = async (req, res, next) => {
       const cylinderPrice = inventory.cylinders[sizeStr]?.price || 0;
       const computedCylinderPrice = cylinderPrice > 0 ? cylinderPrice : (kg * inventory.pricePerKg);
 
-      // Delivery charges
-      const isUrgent = originalOrder.isUrgent || false; // Inherit preference? Or default false?
-      // Better to check if user passed isUrgent in body, but body only has cylinderId/newSize. Use default false or inherit.
-      // Let's assume default delivery behavior (standard) unless specified, but previous code used order.isUrgent. 
-      // Safe to default to normal delivery (100) or check if we want to inherit. 
-      // Let's use standard delivery for refills unless we add isUrgent to API.
       const deliveryCharges = 100;
       const urgentDeliveryFee = 0;
 
@@ -431,7 +425,7 @@ const requestRefill = async (req, res, next) => {
         buyer: req.user._id,
         seller: cylinder.seller._id,
         warehouse: originalOrder.warehouse, // Assuming same warehouse
-        driver: null, // Reset driver, will find new one
+        driver: null, // No driver yet - Seller must approve
         orderType: 'refill',
         cylinderSize: sizeStr,
         quantity: 1, // Refills are usually 1 cylinder
@@ -473,65 +467,32 @@ const requestRefill = async (req, res, next) => {
         driverEarnings: []
       });
 
-      // Find driver in zone (using new order's location)
-      const driver = await findDriverInZone(newOrder.deliveryLocation.location);
-
-      if (!driver) {
-        throw new Error('No driver available in your zone. Please wait until a driver becomes available.');
-      }
-
-      if (driver) {
-        newOrder.driver = driver._id;
-        newOrder.status = 'refill_requested';
-        newOrder.statusHistory.push({
-          status: 'refill_pickup',
-          updatedBy: driver._id
-        });
-
-
-        // Add driver earnings
-        newOrder.driverEarnings.push({
-          driver: driver._id,
-          amount: deliveryCharges,
-          status: 'paid',
-          createdAt: new Date()
-        });
-
-        await User.updateOne(
-          { _id: driver._id },
-          { $set: { driverStatus: 'available' } },
-          { session }
-        );
-      }
-
       await newOrder.save({ session });
 
-      console.log('🌊 DEBUG: Refill requested. New Order:', newOrderId, 'Driver:', driver?._id);
+      console.log('🌊 DEBUG: Refill requested. New Order:', newOrderId, 'Waiting for Seller Approval');
 
-      // Notify driver (if assigned) and seller
-      // Note: newOrder is passed, so notification will link to new order details
-      await NotificationService.sendOrderNotification(newOrder, driver ? 'refill_pickup' : 'refill_requested');
+      // Notify Seller
+      await NotificationService.sendOrderNotification(newOrder, 'refill_requested');
 
       // Sync Sheet
       syncOrderTimelineToSheet(newOrder, cylinder.seller, cylinder.buyer);
 
       // Update cylinder status AND link to NEW order
+      // We mark it as 'in_refill' so buyer knows it's being processed.
+      // Current Location stays with Buyer until Driver picks it up.
       cylinder.status = 'in_refill';
-      cylinder.order = newOrder._id; // <--- Critical: Point to new order
-      cylinder.assignedOrder = newOrder._id; // Deprecated field? Or alias? Keeping both synced.
+      cylinder.order = newOrder._id;
+      cylinder.assignedOrder = newOrder._id;
       await cylinder.save({ session });
 
       // Prepare response
       const populated = await Order.findById(newOrder._id)
-        .populate({ path: 'driver', select: '_id fullName phoneNumber driverStatus' })
         .populate({ path: 'warehouse', select: 'location city' })
         .session(session);
 
       return res.status(200).json({
         success: true,
-        message: driver
-          ? 'Refill requested – driver assigned for pickup'
-          : 'Refill requested – pickup created (no driver)',
+        message: 'Refill requested successfully. Waiting for seller approval.',
         order: populated
       });
     });

@@ -45,6 +45,10 @@ const orderSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Cylinder'
   },
+  deliveredCylinder: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Cylinder'
+  },
   pickupLocation: {
     address: String,
     location: {

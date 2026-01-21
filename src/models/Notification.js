@@ -18,8 +18,7 @@ const notificationSchema = new mongoose.Schema({
     type: String,
     enum: [
       'order_created', 'order_assigned', 'order_status_update', 'payment_success',
-      'payment_failed', 'seller_approved', 'seller_rejected', 'rating_received',
-      'refill_reminder', 'system', 'refill_requested', 'refill_pickup', 'delivery_confirmed'
+      'payment_failed', 'seller_approved', 'seller_rejected', 'rating_received','return_requested','return_pickup','refill_reminder', 'system', 'refill_requested', 'refill_pickup', 'delivery_confirmed'
     ],
     required: true
   },

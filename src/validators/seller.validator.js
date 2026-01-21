@@ -4,17 +4,17 @@ const Joi = require('joi');
 
 exports.addLocation = Joi.object({
   locations: Joi.array().items(
-      Joi.object({
-        warehouseName: Joi.string().min(2).max(200).required(),
-        city: Joi.string().min(2).max(100).required(),
-        address: Joi.string().min(5).max(500).required(),
-        location: Joi.object({
-          coordinates: Joi.array()
-              .items(Joi.number())
-              .length(2)
-              .required()
-        }).required()
-      })
+    Joi.object({
+      warehouseName: Joi.string().min(2).max(200).required(),
+      city: Joi.string().min(2).max(100).required(),
+      address: Joi.string().min(5).max(500).required(),
+      location: Joi.object({
+        coordinates: Joi.array()
+          .items(Joi.number())
+          .length(2)
+          .required()
+      }).required()
+    })
   ).min(1).required()
 });
 
@@ -84,6 +84,7 @@ exports.updateInventory = Joi.object({
 });
 
 exports.markReady = Joi.object({
+  warehouseId: Joi.string().required(),
   notes: Joi.string().max(500).optional()
 });
 

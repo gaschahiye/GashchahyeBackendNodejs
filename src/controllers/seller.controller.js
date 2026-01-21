@@ -442,10 +442,10 @@ const getOrders = async (req, res, next) => {
           query.status = 'pending';
           break;
         case 'refill':
-          query.status = 'refill_in_store';
+          query.status = 'refill_requested';
           break;
         case 'inprocess':
-          query.status = 'in_transit';
+          query.status = { $in: ['in_transit', 'pickup_ready'] };
           break;
         case 'delivered':
           query.status = 'delivered';
@@ -490,7 +490,7 @@ const getOrders = async (req, res, next) => {
 
 
 
-const markOrderReadyForPickup = async (req, res, next) => {
+const approveRefill = async (req, res, next) => {
   try {
     const sellerId = req.user._id;
     const { orderId } = req.params;
@@ -507,6 +507,14 @@ const markOrderReadyForPickup = async (req, res, next) => {
       });
     }
 
+    // Only allow approval if status is 'refill_requested' OR 'pending' (for new orders)
+    if (!['refill_requested', 'pending'].includes(order.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order cannot be approved in current status'
+      });
+    }
+
     const inventory = await Inventory.findOne({ _id: warehouseId, seller: sellerId });
     if (!inventory) {
       return res.status(404).json({
@@ -515,28 +523,18 @@ const markOrderReadyForPickup = async (req, res, next) => {
       });
     }
 
-    // const availableCylinders = await Cylinder.find({
-    //   seller: sellerId,
-    //   warehouse: warehouseId,
-    //   // status: 'active'
-    // }).limit(order.quantity);
-    //
-    // if (availableCylinders.length < order.quantity) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: 'Not enough filled cylinders available in this warehouse'
-    //   });
-    // }
+    // Check inventory stock
+    const availableQty = inventory.cylinders[order.cylinderSize]?.quantity || 0;
+    if (availableQty < order.quantity) {
+      return res.status(400).json({
+        success: false,
+        message: 'Not enough filled cylinders available in this warehouse'
+      });
+    }
 
-    // const assignedCylinderIds = availableCylinders.map(c => c._id);
-    //
-    // await Cylinder.updateMany(
-    //     { _id: { $in: assignedCylinderIds } },
-    //     { $set: { status: 'issued', assignedOrder: order._id } }
-    // );
-
-    inventory.issuedCylinders += order.quantity;
-    inventory.cylinders[order.cylinderSize].quantity -= order.quantity;
+    // Update Inventory
+    inventory.issuedCylinders = (inventory.issuedCylinders || 0) + order.quantity;
+    inventory.cylinders[order.cylinderSize].quantity = availableQty - order.quantity;
     await inventory.save();
 
     // ✅ ADD DRIVER ASSIGNMENT BASED ON ZONE
@@ -546,29 +544,45 @@ const markOrderReadyForPickup = async (req, res, next) => {
 
       // Update driver status
       await User.findByIdAndUpdate(driver._id, {
-        driverStatus: 'available',
-        currentOrder: order._id
+        driverStatus: 'available', // Keep available to take more? usually 'busy' if one-at-a-time.
+        // currentOrder: order._id // Deprecated?
+      });
+
+      // Assign Driver Earnings
+      order.driverEarnings.push({
+        driver: driver._id,
+        amount: order.pricing.deliveryCharges,
+        status: 'paid', // or pending
+        createdAt: new Date()
+      });
+      order.status = 'pickup_ready'; // Refill accepted/ready
+      order.statusHistory.push({
+        status: 'pickup_ready',
+        updatedBy: req.user._id,
+        notes: 'Seller approved refill and driver assigned'
+      });
+    } else {
+      // No driver found - what to do?
+      // For now, accept it but stay in 'pickup_ready' or a specific 'waiting_for_driver' state?
+      // Let's set to 'pickup_ready' and admin/driver can pick it up later?
+      // Or fail? Best to allow Seller to Mark Ready, and Driver finds it later.
+      order.status = 'pickup_ready';
+      order.statusHistory.push({
+        status: 'pickup_ready',
+        updatedBy: req.user._id,
+        notes: 'Seller approved refill. No driver immediately available.'
       });
     }
 
-    order.status = 'assigned';
     order.warehouse = warehouseId;
-    // order.assignedCylinders = assignedCylinderIds;
 
-    // ✅ ADD PAYMENT TIMELINE ENTRY
+    // ✅ PAYMENT TIMELINE
     order.paymentTimeline.push({
       timelineId: new mongoose.Types.ObjectId().toString(),
       type: 'delivery_fee',
       cause: 'Delivery Charge',
       amount: order.pricing.deliveryCharges || 0,
-      liabilityType: 'revenue', // User stated fees are Company Revenue
-      status: 'completed', // Assuming collected/paid? Or pending driver payout? Usually Pending until driver paid.
-      // But for COMPANY REVENUE tracking, we can say it's revenue.
-      // Let's keep status 'pending' if it's not yet settled, or 'completed' if instant.
-      // Original code had 'completed'. I'll stick to 'completed' for now as per comment recovery, but usually fees are realized upon delivery?
-      // Wait, this is "Ready for Pickup". Is fee earned then? Probably not.
-      // Let's set status to 'pending' to be safe, or 'completed' if we assume prepaid?
-      // Default to 'pending' for consistency with other entries.
+      liabilityType: 'revenue',
       status: 'pending',
       driverId: driver ? driver._id : null,
       createdAt: new Date()
@@ -576,26 +590,16 @@ const markOrderReadyForPickup = async (req, res, next) => {
 
     await order.save();
 
-    await NotificationService.sendOrderNotification(order, 'order_assigned');
+    // Notify Driver (if assigned) and Buyer
+    const notifyEvent = driver ? 'refill_pickup' : 'order_assigned'; // reuse 'order_assigned' for generic 'ready'
+    await NotificationService.sendOrderNotification(order, notifyEvent);
 
     res.json({
       success: true,
-      message: 'Order marked as ready for pickup successfully',
+      message: 'Refill approved and marked ready for pickup',
       data: {
         orderId: order._id,
-        warehouse: {
-          id: inventory._id,
-          name: inventory.location,
-          city: inventory.city
-        },
         driverAssigned: !!driver,
-        // issuedCylinders: assignedCylinderIds.length,
-        // cylinderDetails: availableCylinders.map(c => ({
-        //   id: c._id,
-        //   serialNumber: c.serialNumber,
-        //   size: c.size,
-        //   status: 'issued'
-        // }))
       }
     });
 
@@ -1123,7 +1127,7 @@ module.exports = {
   updateInventoryQuantity,
   getActiveCylindersMap,
   getOrders,
-  markOrderReadyForPickup,
+  approveRefill,
   generateInvoice,
   getDashboardStats,
   getSellerProfile,

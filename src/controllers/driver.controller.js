@@ -203,11 +203,8 @@ const generateQRCode = async (req, res, next) => {
     order.status = 'qrgenerated';
     await order.save();
 
-    // Update cylinder with QR code if it exists
-    await Cylinder.findOneAndUpdate(
-      { order: orderId },
-      { qrCode: qrResult.qrCode }
-    );
+    // Do NOT overwrite Cylinder QR code. 
+    // Cylinder QR is permanent asset tag. Order QR is transaction specific.
 
     res.json({
       success: true,
@@ -264,95 +261,102 @@ const scanQRCode = async (req, res, next) => {
     const { orderId } = req.params;
     const { qrCode } = req.body;
 
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId).populate('buyer');
 
     if (!order || order.driver.toString() !== req.user._id.toString()) {
       return res.status(404).json({ success: false, message: 'Order not found or unauthorized' });
     }
 
-    // Simple verification
-    if (order.qrCode !== qrCode) {
-      return res.status(400).json({ success: false, message: 'QR code does not match this order' });
-    }
+    // --- PHASE 1: PICKUP AT SELLER (or Fresh Cylinder Scan) ---
+    if (['pickup_ready', 'refill_accepted', 'orders_assigned'].includes(order.status)) {
+      // Driver is scanning the FRESH cylinder at the seller's warehouse
+      // We expect `qrCode` to remain on the cylinder (Permanent ID) OR Order QR if stickers used
+      // But per new design, we assume they scan the ORDER QR to confirm pickup? 
+      // OR do they scan the Cylinder Asset Tag?
+      // Let's stick to Order QR validation for the transaction start
 
-    // Update order status
-    if (['pickup_ready', 'qrgenerated', 'assigned', 'refill_requested', 'return_requested'].includes(order.status)) {
+      if (order.qrCode !== qrCode) {
+        // If they scanned a Cylinder Asset Tag, we might want to link it?
+        // For now, strict Order QR check as per previous logic, OR verify if it matches assigned cylinder?
+        // Let's assume strict Order QR for pickup confirmation.
+        return res.status(400).json({ success: false, message: 'QR code does not match this order' });
+      }
+
       order.status = 'in_transit';
       order.statusHistory.push({
         status: 'in_transit',
         updatedBy: req.user._id,
-        notes: 'Driver scanned QR code and started delivery'
+        notes: 'Driver scanned QR code and picked up fresh cylinder'
       });
-
-      await Cylinder.findOneAndUpdate(
-        { order: orderId },
-        { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
-      );
 
       await order.save();
       await NotificationService.sendOrderNotification(order, 'order_status_update');
-
-      res.json({ success: true, message: 'Order status updated to in transit', order });
-    } else if (['in_transit'].includes(order.status) && ['refill'].includes(order.orderType)) {
-      order.status = 'refill_in_store';
-      order.orderType = 'new';
-      order.statusHistory.push({
-        status: 'delivered',
-        updatedBy: req.user._id,
-        notes: 'Driver scanned QR code And Deliverd the cylinder to the Store for refill '
-      });
-
-      await Cylinder.findOneAndUpdate(
-        { order: orderId },
-        { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
-      );
-
-      await order.save();
-      await NotificationService.sendOrderNotification(order, 'order_status_update');
-
-      res.json({ success: true, message: 'Order status updated to in transit', order });
+      return res.json({ success: true, message: 'Pickup confirmed. Order in transit.', order });
     }
-    else if (['in_transit'].includes(order.status) && ['new'].includes(order.orderType)) {
-      order.status = 'delivered';
-      // order.orderType = 'refill';
+
+    // --- PHASE 2: DELIVERY & SWAP AT BUYER ---
+    else if (order.status === 'in_transit') {
+      // Driver is at Buyer's location.
+      // Needs to scan:
+      // 1. Order QR (to confirm delivery of Fresh)
+      // 2. Empty Cylinder QR (to confirm return) - logic separate or combined?
+      // CURRENT FLOW: Single Scan to "Deliver". 
+      // We will assume this scan confirms the DROP OFF of the Fresh Cylinder.
+
+      if (order.qrCode !== qrCode) {
+        return res.status(400).json({ success: false, message: 'QR code does not match this order' });
+      }
+
+      // 1. Handle Fresh Cylinder (Delivered)
+      // If we tracked specific cylinder IDs, we would assign it now.
+      // Create/Activate "Fresh" Cylinder for Buyer
+      const freshCylinder = new Cylinder({
+        buyer: order.buyer._id,
+        seller: order.seller,
+        size: order.cylinderSize,
+        status: 'active',
+        currentLocation: order.deliveryLocation.location,
+        serialNumber: `GEN-${Date.now()}`, // Placeholder logic if no physical scan
+        qrCode: `CYL-${Date.now()}`, // Placeholder new asset tag
+        weights: { tareWeight: 10, netWeight: 10, grossWeight: 20, weightDifference: 0 } // Defaults
+      });
+      await freshCylinder.save();
+
+      // 2. Handle Empty Cylinder (Return)
+      // Find the 'existingCylinder' (the one being returned)
+      if (order.existingCylinder) {
+        await Cylinder.findByIdAndUpdate(order.existingCylinder, {
+          status: 'in_transit', // Now with driver
+          buyer: null, // No longer with buyer
+          currentLocation: req.user.currentLocation // With Driver
+        });
+      }
+
+      order.status = 'delivered'; // Or 'delivered_and_swapped'
+      order.deliveredCylinder = freshCylinder._id;
+      order.actualDeliveryTime = new Date();
+
       order.statusHistory.push({
         status: 'delivered',
         updatedBy: req.user._id,
-        notes: 'Driver scanned QR code and Delivered the cylinder on location'
+        notes: 'Delivered fresh cylinder & picked up empty one'
       });
 
-      await Cylinder.findOneAndUpdate(
-        { order: orderId },
-        { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
-      );
-
       await order.save();
+      await User.findByIdAndUpdate(req.user._id, { driverStatus: 'available' }); // Make available? Or wait for return dropoff?
+      // Usually wait for return dropoff if they have a cylinder. But logic says 'available'.
+
       await NotificationService.sendOrderNotification(order, 'delivery_confirmed');
-
-      res.json({ success: true, message: 'Order status updated to in transit', order });
+      return res.json({ success: true, message: 'Delivery & Swap confirmed', order });
     }
-    else if (['in_transit'].includes(order.status) && ['return'].includes(order.orderType)) {
-      order.status = 'completed';
-      order.orderType = 'refill';
-      order.statusHistory.push({
-        status: 'Returned',
-        updatedBy: req.user._id,
-        notes: 'Cylinder has been succesfully delivered to the store'
-      });
 
-      await Cylinder.findOneAndUpdate(
-        { order: orderId },
-        { currentLocation: req.user.currentLocation, lastUpdated: new Date() }
-      );
+    // --- PHASE 3: RETURN DROP OFF AT SELLER ---
+    // (This might require a separate status or endpoint, but keeping simple for now)
 
-      await order.save();
-      await NotificationService.sendOrderNotification(order, 'order_status_update');
-
-      res.json({ success: true, message: 'Order status updated to in transit', order });
-    }
     else {
-      res.status(400).json({ success: false, message: 'QR code cannot be scanned in current order status' });
+      res.status(400).json({ success: false, message: 'QR cannot be scanned in current status' });
     }
+
   } catch (error) {
     next(error);
   }
