@@ -296,62 +296,133 @@ const scanQRCode = async (req, res, next) => {
 
     // --- PHASE 2: DELIVERY & SWAP AT BUYER ---
     else if (order.status === 'in_transit') {
-      // Driver is at Buyer's location.
-      // Needs to scan:
-      // 1. Order QR (to confirm delivery of Fresh)
-      // 2. Empty Cylinder QR (to confirm return) - logic separate or combined?
-      // CURRENT FLOW: Single Scan to "Deliver". 
-      // We will assume this scan confirms the DROP OFF of the Fresh Cylinder.
 
+      // Validate Delivery Scan
       if (order.qrCode !== qrCode) {
         return res.status(400).json({ success: false, message: 'QR code does not match this order' });
       }
 
-      // 1. Handle Fresh Cylinder (Delivered)
-      // If we tracked specific cylinder IDs, we would assign it now.
-      // Create/Activate "Fresh" Cylinder for Buyer
+      // We always deliver a FRESH cylinder (Virtual Asset Creation)
+      // In a real system with asset tracking, we would identify *which* cylinder from seller's stock.
+      // For now, we mint a new record for the buyer.
       const freshCylinder = new Cylinder({
         buyer: order.buyer._id,
         seller: order.seller,
         size: order.cylinderSize,
         status: 'active',
         currentLocation: order.deliveryLocation.location,
-        serialNumber: `GEN-${Date.now()}`, // Placeholder logic if no physical scan
-        qrCode: `CYL-${Date.now()}`, // Placeholder new asset tag
-        weights: { tareWeight: 10, netWeight: 10, grossWeight: 20, weightDifference: 0 } // Defaults
+        serialNumber: `GEN-${Date.now()}`,
+        qrCode: `CYL-${Date.now()}`,
+        weights: { tareWeight: 10, netWeight: 10, grossWeight: 20, weightDifference: 0 }
       });
       await freshCylinder.save();
 
-      // 2. Handle Empty Cylinder (Return)
-      // Find the 'existingCylinder' (the one being returned)
-      if (order.existingCylinder) {
+      // Update Order with the specific cylinder delivered
+      order.deliveredCylinder = freshCylinder._id;
+
+      // --- BRANCH BY ORDER TYPE ---
+      if (order.orderType === 'refill') {
+        // REFILL LOGIC: Must Collect Empty Cylinder
+        if (!order.existingCylinder) {
+          // This safeguards against data corruption
+          return res.status(400).json({ success: false, message: 'Refill order missing existing cylinder data.' });
+        }
+
+        // Move OLD cylinder to Driver/Transit
         await Cylinder.findByIdAndUpdate(order.existingCylinder, {
-          status: 'in_transit', // Now with driver
-          buyer: null, // No longer with buyer
-          currentLocation: req.user.currentLocation // With Driver
+          status: 'in_transit',
+          buyer: null,
+          currentLocation: req.user.currentLocation
+        });
+
+        order.status = 'delivered';
+        order.statusHistory.push({
+          status: 'delivered',
+          updatedBy: req.user._id,
+          notes: 'Refill Delivered. Fresh handed over, Empty picked up.'
+        });
+
+      } else {
+        // NEW ORDER / OTHER LOGIC: Just Delivery
+        order.status = 'delivered'; // Should this go to completed? 
+        // If it's a new order, there is no "Return Phase" at the seller?
+        // Actually, driver goes back to seller anyway? But nothing to return.
+        // Usually 'new' orders are "Done" at delivery?
+        // Let's mark 'delivered'. If driver has nothing to return, maybe they can mark 'completed' manually?
+        // Or let's auto-complete NEW orders since there is no phase 3.
+
+        order.status = 'completed'; // New orders don't need to return an empty.
+        order.statusHistory.push({
+          status: 'completed', // Auto-complete for New Orders?
+          updatedBy: req.user._id,
+          notes: 'New Connection Delivered. Order Complete.'
+        });
+
+        // Free up driver immediately for New Orders
+        await User.findByIdAndUpdate(req.user._id, { driverStatus: 'available' });
+      }
+
+      order.actualDeliveryTime = new Date();
+      await order.save();
+      await NotificationService.sendOrderNotification(order, 'delivery_confirmed');
+
+      return res.json({ success: true, message: 'Delivery Confirmed', order });
+    }
+
+    // --- PHASE 3: RETURN DROP OFF AT SELLER (REFILLS ONLY) ---
+    else if (order.status === 'delivered') {
+
+      // Driver is at Seller's Warehouse with the Empty Cylinder (Cylinder B)
+      // Must scan Cylinder B's QR Code to confirm return.
+
+      if (!order.existingCylinder) {
+        // If no existing cylinder, this step shouldn't happen? 
+        // Or maybe it's just a completion check?
+        // For refill, existingCylinder is mandatory.
+        return res.status(400).json({ success: false, message: 'No cylinder to return for this order' });
+      }
+
+      const returnedCylinder = await Cylinder.findById(order.existingCylinder);
+      if (!returnedCylinder) {
+        return res.status(404).json({ success: false, message: 'Returned cylinder record not found' });
+      }
+
+      // VERIFY SCANNED QR
+      // Expecting Scanned QR to be the Cylinder's Permanent Tag
+      if (returnedCylinder.qrCode !== qrCode) {
+        return res.status(400).json({
+          success: false,
+          message: 'Incorrect Cylinder! Scan the cylinder you picked up from Buyer.'
         });
       }
 
-      order.status = 'delivered'; // Or 'delivered_and_swapped'
-      order.deliveredCylinder = freshCylinder._id;
-      order.actualDeliveryTime = new Date();
+      // UPDATE CYLINDER STATUS
+      returnedCylinder.status = 'active'; // In Seller's Inventory (Empty)
+      returnedCylinder.currentLocation = order.warehouse.location; // Back at Warehouse
+      returnedCylinder.buyer = null;
+      returnedCylinder.driver = null; // No longer with driver
+      returnedCylinder.seller = order.seller; // Ensure seller ownership
+      await returnedCylinder.save();
 
+      // UPDATE SELLER INVENTORY (Add 1 Empty)
+      // Ideally we should increment 'empty' count in Inventory model if tracked specifically
+      // But for now, just marking the Cylinder 'active' at 'warehouse' counts as inventory.
+
+      // UPDATE ORDER STATUS
+      order.status = 'completed';
       order.statusHistory.push({
-        status: 'delivered',
+        status: 'completed',
         updatedBy: req.user._id,
-        notes: 'Delivered fresh cylinder & picked up empty one'
+        notes: 'Driver returned empty cylinder to seller. Cycle complete.'
       });
 
       await order.save();
-      await User.findByIdAndUpdate(req.user._id, { driverStatus: 'available' }); // Make available? Or wait for return dropoff?
-      // Usually wait for return dropoff if they have a cylinder. But logic says 'available'.
+      await User.findByIdAndUpdate(req.user._id, { driverStatus: 'available' });
 
-      await NotificationService.sendOrderNotification(order, 'delivery_confirmed');
-      return res.json({ success: true, message: 'Delivery & Swap confirmed', order });
+      await NotificationService.sendOrderNotification(order, 'order_status_update'); // Notification to Seller
+
+      return res.json({ success: true, message: 'Return Verified. Order Completed.', order });
     }
-
-    // --- PHASE 3: RETURN DROP OFF AT SELLER ---
-    // (This might require a separate status or endpoint, but keeping simple for now)
 
     else {
       res.status(400).json({ success: false, message: 'QR cannot be scanned in current status' });
