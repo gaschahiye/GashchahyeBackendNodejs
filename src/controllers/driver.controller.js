@@ -302,21 +302,31 @@ const scanQRCode = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'QR code does not match this order' });
       }
 
-      // We always deliver a FRESH cylinder (Virtual Asset Creation)
-      // In a real system with asset tracking, we would identify *which* cylinder from seller's stock.
-      // For now, we mint a new record for the buyer.
-      const freshCylinder = new Cylinder({
-        buyer: order.buyer._id,
-        seller: order.seller,
-        size: order.cylinderSize,
-        status: 'active',
-        currentLocation: order.deliveryLocation.location,
-        serialNumber: `GEN-${Date.now()}`,
-        qrCode: `CYL-${Date.now()}`,
-        weights: { tareWeight: 10, netWeight: 10, grossWeight: 20, weightDifference: 0 }
-      });
-      await freshCylinder.save();
+      // 1. Check if a cylinder was already assigned to this order (e.g., during acceptOrder)
+      let freshCylinder = await Cylinder.findOne({ order: order._id });
 
+      if (freshCylinder) {
+          // Existing Cylinder Found (Created in acceptOrder)
+          freshCylinder.status = 'active';
+          freshCylinder.currentLocation = order.deliveryLocation.location;
+          freshCylinder.buyer = order.buyer._id; // Ensure ownership is final
+          await freshCylinder.save();
+      } else {
+          // Fallback: Create new if none exists
+          freshCylinder = new Cylinder({
+            buyer: order.buyer._id,
+            seller: order.seller,
+            size: order.cylinderSize,
+            status: 'active',
+            currentLocation: order.deliveryLocation.location,
+            serialNumber: `GEN-${Date.now()}`,
+            qrCode: `CYL-${Date.now()}`,
+            weights: { tareWeight: 10, netWeight: 10, grossWeight: 20, weightDifference: 0 },
+            order: order._id // Link it for future reference
+          });
+          await freshCylinder.save();
+      }
+      
       // Update Order with the specific cylinder delivered
       order.deliveredCylinder = freshCylinder._id;
 
