@@ -124,7 +124,8 @@ const orderSchema = new mongoose.Schema({
     enum: [
       'pending', 'accepted', 'assigned', 'qrgenerated', 'pickup_ready', 'in_transit', 'delivered',
       'completed', 'cancelled', 'refill_requested', 'refill_pickup', 'refill_accepted',
-      'refill_in_store', 'refill_ready', 'return_requested', 'return_pickup', 'returned'
+      'refill_in_store', 'refill_ready', 'return_requested', 'return_pickup', 'returned',
+      'empty_return'
     ],
     default: 'pending'
   },

@@ -478,9 +478,9 @@ const requestRefill = async (req, res, next) => {
       syncOrderTimelineToSheet(newOrder, cylinder.seller, cylinder.buyer);
 
       // Update cylinder status AND link to NEW order
-      // We mark it as 'in_refill' so buyer knows it's being processed.
+      // We mark it as 'refill_return' so buyer knows it's being processed.
       // Current Location stays with Buyer until Driver picks it up.
-      cylinder.status = 'in_refill';
+      cylinder.status = 'refill_return';
       cylinder.order = newOrder._id;
       cylinder.assignedOrder = newOrder._id;
       await cylinder.save({ session });

@@ -592,7 +592,7 @@ const approveRefill = async (req, res, next) => {
       cause: 'Delivery Charge',
       amount: order.pricing.deliveryCharges || 0,
       liabilityType: 'revenue',
-      status: 'pending',
+      status: 'paid',
       driverId: driver ? driver._id : null,
       createdAt: new Date()
     });
@@ -889,7 +889,8 @@ const getDashboardStats = async (req, res, next) => {
       refillRequests,
     ] = await Promise.all([
       Cylinder.countDocuments({ seller: sellerId, status: 'empty' }),
-      Order.countDocuments({ seller: sellerId, status: { $in: ['pending', 'assigned'] } }),
+      // Include 'refill_requested' in New Orders so they appear in the main alert badge
+      Order.countDocuments({ seller: sellerId, status: { $in: ['pending', 'assigned', 'refill_requested'] } }),
       Order.countDocuments({ seller: sellerId, status: { $in: ['pickup_ready', 'in_transit'] } }),
       Order.countDocuments({ seller: sellerId, status: 'completed' }),
       Order.countDocuments({ seller: sellerId, orderType: 'return', status: 'return_requested' }),

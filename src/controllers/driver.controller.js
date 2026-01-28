@@ -261,7 +261,9 @@ const scanQRCode = async (req, res, next) => {
     const { orderId } = req.params;
     const { qrCode } = req.body;
 
-    const order = await Order.findById(orderId).populate('buyer');
+    const order = await Order.findById(orderId)
+      .populate('buyer')
+      .populate('existingCylinder'); // Needed for Security Fee & Verification
 
     if (!order || order.driver.toString() !== req.user._id.toString()) {
       return res.status(404).json({ success: false, message: 'Order not found or unauthorized' });
@@ -306,27 +308,28 @@ const scanQRCode = async (req, res, next) => {
       let freshCylinder = await Cylinder.findOne({ order: order._id });
 
       if (freshCylinder) {
-          // Existing Cylinder Found (Created in acceptOrder)
-          freshCylinder.status = 'active';
-          freshCylinder.currentLocation = order.deliveryLocation.location;
-          freshCylinder.buyer = order.buyer._id; // Ensure ownership is final
-          await freshCylinder.save();
+        // Existing Cylinder Found (Created in acceptOrder)
+        freshCylinder.status = 'active';
+        freshCylinder.currentLocation = order.deliveryLocation.location;
+        freshCylinder.buyer = order.buyer._id; // Ensure ownership is final
+        await freshCylinder.save();
       } else {
-          // Fallback: Create new if none exists
-          freshCylinder = new Cylinder({
-            buyer: order.buyer._id,
-            seller: order.seller,
-            size: order.cylinderSize,
-            status: 'active',
-            currentLocation: order.deliveryLocation.location,
-            serialNumber: `GEN-${Date.now()}`,
-            qrCode: `CYL-${Date.now()}`,
-            weights: { tareWeight: 10, netWeight: 10, grossWeight: 20, weightDifference: 0 },
-            order: order._id // Link it for future reference
-          });
-          await freshCylinder.save();
+        // Fallback: Create new if none exists
+        freshCylinder = new Cylinder({
+          buyer: order.buyer._id,
+          seller: order.seller,
+          size: order.cylinderSize,
+          status: 'active',
+          currentLocation: order.deliveryLocation.location,
+          serialNumber: `GEN-${Date.now()}`,
+          qrCode: `CYL-${Date.now()}`,
+          weights: { tareWeight: 10, netWeight: 10, grossWeight: 20, weightDifference: 0 },
+          securityFee: order.existingCylinder?.securityFee || 0, // Copy from returned cylinder
+          order: order._id
+        });
+        await freshCylinder.save();
       }
-      
+
       // Update Order with the specific cylinder delivered
       order.deliveredCylinder = freshCylinder._id;
 
@@ -345,11 +348,11 @@ const scanQRCode = async (req, res, next) => {
           currentLocation: req.user.currentLocation
         });
 
-        order.status = 'delivered';
+        order.status = 'empty_return'; // Status Change: 'delivered' -> 'empty_return' per User Request
         order.statusHistory.push({
-          status: 'delivered',
+          status: 'empty_return',
           updatedBy: req.user._id,
-          notes: 'Refill Delivered. Fresh handed over, Empty picked up.'
+          notes: 'Refill Delivered. Fresh handed over, Empty waiting for return at seller.'
         });
 
       } else {
@@ -380,7 +383,7 @@ const scanQRCode = async (req, res, next) => {
     }
 
     // --- PHASE 3: RETURN DROP OFF AT SELLER (REFILLS ONLY) ---
-    else if (order.status === 'delivered') {
+    else if (['delivered', 'empty_return'].includes(order.status)) { // Accepts both for backward compatibility
 
       // Driver is at Seller's Warehouse with the Empty Cylinder (Cylinder B)
       // Must scan Cylinder B's QR Code to confirm return.
@@ -597,14 +600,16 @@ const getDriverDashboard = async (req, res, next) => {
       inProcessOrders,
       deliveredOrders,
       returnRequests,
-      emptyCylinders,
+      activeRefills,
+      returnEmptyCylinders,
       todaysOrders
     ] = await Promise.all([
       Order.countDocuments({ driver: driverId, status: { $in: ['assigned', 'qrgenerated', 'accepted'] } }),
       Order.countDocuments({ driver: driverId, status: { $in: ['in_transit'] } }),
       Order.countDocuments({ driver: driverId, status: 'delivered' }),
       Order.countDocuments({ driver: driverId, orderType: 'return', status: { $in: ['return_requested', 'return_pickup'] } }),
-      Order.countDocuments({ driver: driverId, orderType: 'refill', status: { $in: ['refill_requested'] } }), // This might need adjustment
+      Order.countDocuments({ driver: driverId, orderType: 'refill', status: { $in: ['refill_requested', 'assigned', 'in_transit'] } }), // Renamed for clarity
+      Order.countDocuments({ driver: driverId, status: 'empty_return' }), // NEW: User Requested "Return Empty Cylinder" section
       Order.find({
         driver: driverId,
         createdAt: { $gte: today }
@@ -622,7 +627,8 @@ const getDriverDashboard = async (req, res, next) => {
         inProcessOrders,
         deliveredOrders,
         returnRequests,
-        emptyCylinders
+        activeRefills, // Renamed from emptyCylinders
+        returnEmptyCylinders // The new section
       },
       todaysOrders
     });

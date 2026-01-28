@@ -16,27 +16,27 @@ const cylinderSchema = new mongoose.Schema({
     ref: 'Order',
     required: false
   },
-  warehouse:{
-    type:mongoose.Schema.Types.ObjectId,
+  warehouse: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'Inventory',
     required: false
   },
   customName: {
     type: String,
     trim: true,
-    default: function() {
+    default: function () {
       return `Cylinder ${this.size}`;
     }
   },
 
-  SellerName:{
-    type:String,
-    required:false,
+  SellerName: {
+    type: String,
+    required: false,
   },
 
-  securityFee:{
-    type:Number,
-    required:false,
+  securityFee: {
+    type: Number,
+    required: false,
   },
 
   size: {
@@ -80,7 +80,7 @@ const cylinderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['active', 'empty', 'in_refill', 'returned'],
+    enum: ['active', 'empty', 'in_refill', 'returned', 'refill_return'],
     default: 'active'
   },
   currentLocation: {
