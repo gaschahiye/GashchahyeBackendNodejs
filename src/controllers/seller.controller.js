@@ -592,7 +592,7 @@ const approveRefill = async (req, res, next) => {
       cause: 'Delivery Charge',
       amount: order.pricing.deliveryCharges || 0,
       liabilityType: 'revenue',
-      status: 'paid',
+      status: 'completed', // Validator fix: changed 'paid' to 'completed'
       driverId: driver ? driver._id : null,
       createdAt: new Date()
     });
