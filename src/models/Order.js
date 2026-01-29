@@ -45,10 +45,12 @@ const orderSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Cylinder'
   },
-  deliveredCylinder: {
+  deliveredCylinders: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Cylinder'
-  },
+  }],
+  // Deprecated singular field (kept for safety if needed, or removed? Removed is cleaner for "new" model)
+  // deliveredCylinder: { ... } - REMOVING to enforce array usage.
   pickupLocation: {
     address: String,
     location: {

@@ -26,6 +26,7 @@ const getAssignedOrders = async (req, res, next) => {
         .populate('buyer', 'fullName phoneNumber addresses')
         .populate('seller', 'businessName phoneNumber')
         .populate('existingCylinder', 'serialNumber customName')
+        .populate('deliveredCylinders', 'serialNumber customName weights') // Show Fresh Cylinders (List)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit)),
@@ -55,7 +56,9 @@ const acceptOrder = async (req, res, next) => {
 
     const order = await Order.findById(orderId)
       .populate('buyer')
-      .populate('seller');
+      .populate('seller')
+      .populate('existingCylinder') // Needed for Refill Security Fee
+      .populate('warehouse');       // Needed for Warehouse Location
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
@@ -76,21 +79,35 @@ const acceptOrder = async (req, res, next) => {
     // Reset verification array
     order.cylinderVerification = [];
 
-    // Determine cylinder location (common for all)
+    // Determine Cylinder Location:
+    // 1. Driver's Current Location (Best)
+    // 2. Warehouse Location (Next Best - since at pickup)
+    // 3. Fallback to default
     let cylinderLocation = {
       type: 'Point',
-      coordinates: [0, 0] // fallback
+      coordinates: [0, 0]
     };
-    if (order.deliveryLocation?.location?.coordinates?.length === 2) {
-      cylinderLocation.coordinates = order.deliveryLocation.location.coordinates;
+
+    if (req.user.currentLocation?.coordinates?.length === 2) {
+      cylinderLocation.coordinates = req.user.currentLocation.coordinates;
+    } else if (order.warehouse?.location?.coordinates?.length === 2) {
+      cylinderLocation.coordinates = order.warehouse.location.coordinates;
     }
 
     // Calculate security fee per cylinder
-    const perCylinderSecurity = order.quantity > 0
-      ? (order.pricing.securityCharges / order.quantity)
-      : order.pricing.securityCharges;
+    let perCylinderSecurity = 0;
+    if (order.orderType === 'refill') {
+      // For Refills, inherit value from the returning cylinder
+      perCylinderSecurity = order.existingCylinder?.securityFee || 0;
+    } else {
+      // For New Orders, use the charged price
+      perCylinderSecurity = order.quantity > 0
+        ? (order.pricing.securityCharges / order.quantity)
+        : order.pricing.securityCharges;
+    }
 
     // Iterate over cylinders
+    const createdCylinders = []; // Track ALL created/updated cylinders
     for (const [index, cyl] of cylinders.entries()) {
       const {
         cylinderPhoto,
@@ -122,9 +139,9 @@ const acceptOrder = async (req, res, next) => {
         verifiedAt: new Date()
       });
 
-      // Update or create Cylinder if it's a new order
+      // Update or create Cylinder if it's a new order OR refill
       if (order.orderType === 'new' || order.orderType === 'refill') {
-        await Cylinder.findOneAndUpdate(
+        const freshCylinder = await Cylinder.findOneAndUpdate(
           { serialNumber: serialNumber },
           {
             weights: {
@@ -141,13 +158,21 @@ const acceptOrder = async (req, res, next) => {
             securityFee: perCylinderSecurity,
             order: order._id,
             size: order.cylinderSize,
+            customName: `Cylinder ${order.cylinderSize}`, // Ensure name is set
+            status: 'active', // Explicitly set status to active upon issuance
             currentLocation: cylinderLocation,
             warehouse: order.warehouse,
             qrCode: `${order._id}-${index + 1}`, // Generate unique QR for each cylinder
+            lastUpdated: new Date()
           },
           { upsert: true, new: true }
         );
+        createdCylinders.push(freshCylinder);
       }
+    }
+
+    if (createdCylinders.length > 0) {
+      order.deliveredCylinders = createdCylinders.map(c => c._id); // Link ALL Fresh Cylinders
     }
 
     order.status = 'accepted';
@@ -330,8 +355,8 @@ const scanQRCode = async (req, res, next) => {
         await freshCylinder.save();
       }
 
-      // Update Order with the specific cylinder delivered
-      order.deliveredCylinder = freshCylinder._id;
+      // Update Order with the specific cylinder delivered (Add to Array)
+      order.deliveredCylinders.addToSet(freshCylinder._id);
 
       // --- BRANCH BY ORDER TYPE ---
       if (order.orderType === 'refill') {
@@ -400,9 +425,9 @@ const scanQRCode = async (req, res, next) => {
         return res.status(404).json({ success: false, message: 'Returned cylinder record not found' });
       }
 
-      // VERIFY SCANNED QR
-      // Expecting Scanned QR to be the Cylinder's Permanent Tag
-      if (returnedCylinder.qrCode !== qrCode) {
+      // VERIFY SCANNED QR (Allow QR Code OR Serial Number)
+      // Expecting Scanned QR to be the Cylinder's Permanent Tag or Serial
+      if (returnedCylinder.qrCode !== qrCode && returnedCylinder.serialNumber !== qrCode) {
         return res.status(400).json({
           success: false,
           message: 'Incorrect Cylinder! Scan the cylinder you picked up from Buyer.'
