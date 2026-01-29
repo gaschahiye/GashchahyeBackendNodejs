@@ -29,17 +29,17 @@ const ratingSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['delivery', 'return', 'refill'],
+    enum: ['delivery', 'return', 'refill', 'suggestion', 'complaint'],
     required: true
   }
 }, {
   timestamps: true
 });
 
-ratingSchema.post('save', async function() {
+ratingSchema.post('save', async function () {
   const Rating = this.constructor;
   const User = mongoose.model('User');
-  
+
   const stats = await Rating.aggregate([
     { $match: { seller: this.seller } },
     {
@@ -50,7 +50,7 @@ ratingSchema.post('save', async function() {
       }
     }
   ]);
-  
+
   if (stats.length > 0) {
     await User.findByIdAndUpdate(this.seller, {
       'rating.average': parseFloat(stats[0].average.toFixed(1)),
