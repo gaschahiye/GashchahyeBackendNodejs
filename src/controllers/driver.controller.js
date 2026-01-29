@@ -117,9 +117,7 @@ const acceptOrder = async (req, res, next) => {
       perCylinderSecurity = order.existingCylinder?.securityFee || 0;
     } else {
       // For New Orders, use the charged price
-      perCylinderSecurity = order.quantity > 0
-        ? (order.pricing.securityCharges / order.quantity)
-        : order.pricing.securityCharges;
+      perCylinderSecurity = order.pricing.securityCharges;
     }
 
     console.log(`💰 DEBUG: Security Fee Per Cylinder: ${perCylinderSecurity}`);
@@ -184,7 +182,7 @@ const acceptOrder = async (req, res, next) => {
             customName: `Cylinder ${order.cylinderSize}`, // Ensure name is set
             status: 'active', // Explicitly set status to active upon issuance
             currentLocation: cylinderLocation,
-            warehouse: order.warehouse,
+            warehouse: existingCylinder?.warehouse,
             qrCode: `${order._id}-${index + 1}`, // Generate unique QR for each cylinder
             lastUpdated: new Date()
           },
