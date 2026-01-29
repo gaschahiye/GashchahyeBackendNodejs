@@ -424,7 +424,7 @@ const requestRefill = async (req, res, next) => {
         orderId: newOrderId,
         buyer: req.user._id,
         seller: cylinder.seller._id,
-        warehouse: originalOrder.warehouse, // Assuming same warehouse
+        warehouse: cylinder.warehouse, // Assuming same warehouse
         driver: null, // No driver yet - Seller must approve
         orderType: 'refill',
         cylinderSize: sizeStr,
@@ -432,7 +432,7 @@ const requestRefill = async (req, res, next) => {
         existingCylinder: cylinder._id,
         pickupLocation: originalOrder.pickupLocation, // Copy if exists
         deliveryLocation: originalOrder.deliveryLocation, // Copy location
-        warehouse: originalOrder.warehouse,
+
         pricing: {
           cylinderPrice: computedCylinderPrice,
           securityCharges: 0,
