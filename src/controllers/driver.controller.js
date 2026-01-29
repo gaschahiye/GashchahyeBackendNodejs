@@ -106,6 +106,10 @@ const acceptOrder = async (req, res, next) => {
       cylinderLocation.coordinates = order.warehouse.location.coordinates;
     }
 
+    console.log('📍 DEBUG: Determined Cylinder Location:', JSON.stringify(cylinderLocation));
+    console.log('   User Location:', JSON.stringify(req.user.currentLocation));
+    console.log('   Warehouse Location:', JSON.stringify(order.warehouse?.location));
+
     // Calculate security fee per cylinder
     let perCylinderSecurity = 0;
     if (order.orderType === 'refill') {
@@ -117,6 +121,11 @@ const acceptOrder = async (req, res, next) => {
         ? (order.pricing.securityCharges / order.quantity)
         : order.pricing.securityCharges;
     }
+
+    console.log(`💰 DEBUG: Security Fee Per Cylinder: ${perCylinderSecurity}`);
+    console.log(`   Order Type: ${order.orderType}`);
+    console.log(`   Order Pricing Security: ${order.pricing.securityCharges}`);
+    console.log(`   Existing Cylinder Security: ${order.existingCylinder?.securityFee}`);
 
     // Iterate over cylinders
     const createdCylinders = []; // Track ALL created/updated cylinders
