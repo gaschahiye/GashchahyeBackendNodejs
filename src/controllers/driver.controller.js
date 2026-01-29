@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Order = require('../models/Order');
 const Cylinder = require('../models/Cylinder');
+const Inventory = require('../models/Inventory');
 const QRCodeService = require('../services/qrcode.service');
 const NotificationService = require('../services/notification.service');
 const uploadService = require('../services/upload.service');
@@ -438,17 +439,21 @@ const scanQRCode = async (req, res, next) => {
         });
       }
 
-      // UPDATE CYLINDER STATUS
-      returnedCylinder.status = 'active'; // In Seller's Inventory (Empty)
-      returnedCylinder.currentLocation = order.warehouse.location; // Back at Warehouse
-      returnedCylinder.buyer = null;
-      returnedCylinder.driver = null; // No longer with driver
-      returnedCylinder.seller = order.seller; // Ensure seller ownership
-      await returnedCylinder.save();
-
       // UPDATE SELLER INVENTORY (Add 1 Empty)
-      // Ideally we should increment 'empty' count in Inventory model if tracked specifically
-      // But for now, just marking the Cylinder 'active' at 'warehouse' counts as inventory.
+      // fetch inventory for this warehouse
+      const inventory = await Inventory.findById(order.warehouse);
+      if (inventory) {
+        const size = returnedCylinder.size;
+        // Check if size exists in inventory map, if so increment
+        if (inventory.cylinders && inventory.cylinders[size]) {
+          inventory.cylinders[size].quantity = (inventory.cylinders[size].quantity || 0) + 1;
+          inventory.markModified('cylinders'); // Mixed type requires this
+          await inventory.save();
+        }
+      }
+
+      // DELETE CYLINDER RECORD (As per Seller requirement)
+      await Cylinder.findByIdAndDelete(returnedCylinder._id);
 
       // UPDATE ORDER STATUS
       order.status = 'completed';
