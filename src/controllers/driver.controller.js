@@ -427,6 +427,10 @@ const scanQRCode = async (req, res, next) => {
 
       // VERIFY SCANNED QR (Allow QR Code OR Serial Number)
       // Expecting Scanned QR to be the Cylinder's Permanent Tag or Serial
+
+      console.log(`qrCode: ${qrCode}`);
+      console.log(`returnedCylinder.qrCode: ${returnedCylinder.qrCode}`);
+      console.log(`returnedCylinder.serialNumber: ${returnedCylinder.serialNumber}`);
       if (returnedCylinder.qrCode !== qrCode && returnedCylinder.serialNumber !== qrCode) {
         return res.status(400).json({
           success: false,
