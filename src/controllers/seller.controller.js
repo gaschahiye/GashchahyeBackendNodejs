@@ -909,6 +909,7 @@ const getDashboardStats = async (req, res, next) => {
         completedOrders,
         returnRequests,
         refillRequests,
+        pendingReturns: await Order.countDocuments({ seller: sellerId, status: 'empty_return' }),
         revenue: {
           today: revenueTodayAgg[0]?.total || 0,
           thisWeek: revenueWeekAgg[0]?.total || 0,
@@ -1111,6 +1112,7 @@ const getDashboardStatsByWarehouse = async (req, res, next) => {
         completedOrders,
         returnRequests,
         refillRequests,
+        pendingReturns: await Order.countDocuments({ seller: sellerId, warehouse: inventory._id, status: 'empty_return' }),
         revenue: {
           today: revenueTodayAgg[0]?.total || 0,
           thisWeek: revenueWeekAgg[0]?.total || 0,
