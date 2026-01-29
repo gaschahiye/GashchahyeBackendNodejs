@@ -432,6 +432,7 @@ const requestRefill = async (req, res, next) => {
         existingCylinder: cylinder._id,
         pickupLocation: originalOrder.pickupLocation, // Copy if exists
         deliveryLocation: originalOrder.deliveryLocation, // Copy location
+        warehouse: originalOrder.warehouse,
         pricing: {
           cylinderPrice: computedCylinderPrice,
           securityCharges: 0,

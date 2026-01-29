@@ -26,7 +26,7 @@ const getAssignedOrders = async (req, res, next) => {
       Order.find(query)
         .populate('buyer', 'fullName phoneNumber addresses')
         .populate('seller', 'businessName phoneNumber')
-        .populate('existingCylinder', 'serialNumber customName')
+        .populate('existingCylinder', 'serialNumber customName qrCode')
         .populate('deliveredCylinders', 'serialNumber customName weights') // Show Fresh Cylinders (List)
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -55,6 +55,9 @@ const acceptOrder = async (req, res, next) => {
     const { orderId } = req.params;
     const { cylinders } = req.body; // Expecting an array of cylinder objects
 
+    console.log(`🔍 DEBUG: acceptOrder called for ${orderId}`);
+    console.log('📦 Payload:', JSON.stringify(req.body, null, 2));
+
     const order = await Order.findById(orderId)
       .populate('buyer')
       .populate('seller')
@@ -62,8 +65,13 @@ const acceptOrder = async (req, res, next) => {
       .populate('warehouse');       // Needed for Warehouse Location
 
     if (!order) {
+      console.log('❌ DEBUG: Order not found');
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
+
+    console.log(`✅ DEBUG: Order found. Status: ${order.status}`);
+    console.log(`   Warehouse: ${order.warehouse?._id}`);
+    console.log(`   ExistingCylinder: ${order.existingCylinder?._id}`);
 
     if (order.driver.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: 'Not authorized to accept this order' });
@@ -74,8 +82,11 @@ const acceptOrder = async (req, res, next) => {
     }
 
     if (!cylinders || !Array.isArray(cylinders) || cylinders.length === 0) {
+      console.log('❌ DEBUG: No cylinder verification data provided');
       return res.status(400).json({ success: false, message: 'Please provide at least one cylinder verification' });
     }
+
+    console.log(`🔄 DEBUG: Processing ${cylinders.length} cylinders...`);
 
     // Reset verification array
     order.cylinderVerification = [];
@@ -140,6 +151,8 @@ const acceptOrder = async (req, res, next) => {
         verifiedAt: new Date()
       });
 
+      console.log(`   ➡ Processing Cylinder Serial: ${serialNumber}`);
+
       // Update or create Cylinder if it's a new order OR refill
       if (order.orderType === 'new' || order.orderType === 'refill') {
         const freshCylinder = await Cylinder.findOneAndUpdate(
@@ -168,7 +181,9 @@ const acceptOrder = async (req, res, next) => {
           },
           { upsert: true, new: true }
         );
+
         createdCylinders.push(freshCylinder);
+        console.log(`   ✅ Cylinder Saved: ${freshCylinder._id} (${freshCylinder.serialNumber})`);
       }
     }
 
@@ -432,7 +447,7 @@ const scanQRCode = async (req, res, next) => {
       console.log(`qrCode: ${qrCode}`);
       console.log(`returnedCylinder.qrCode: ${returnedCylinder.qrCode}`);
       console.log(`returnedCylinder.serialNumber: ${returnedCylinder.serialNumber}`);
-      if (returnedCylinder.qrCode !== qrCode && returnedCylinder.serialNumber !== qrCode) {
+      if (returnedCylinder.qrCode !== qrCode) {
         return res.status(400).json({
           success: false,
           message: 'Incorrect Cylinder! Scan the cylinder you picked up from Buyer.'
