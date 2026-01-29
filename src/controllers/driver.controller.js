@@ -123,7 +123,7 @@ const acceptOrder = async (req, res, next) => {
       });
 
       // Update or create Cylinder if it's a new order
-      if (order.orderType === 'new') {
+      if (order.orderType === 'new' || order.orderType === 'refill') {
         await Cylinder.findOneAndUpdate(
           { serialNumber: serialNumber },
           {
