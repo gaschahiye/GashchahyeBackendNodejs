@@ -497,3 +497,127 @@ exports.assignDriverToOrder = async (req, res, next) => {
 exports.getAllDrivers = exports.getDriversList;
 exports.getAllOrders = exports.getOrdersOverview;
 exports.addNewDriver = exports.createDriver;
+
+
+/**
+ * Get Seller Analytics
+ * @route GET /api/admin/analytics/sellers
+ */
+exports.getSellerAnalytics = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, search, sortBy = 'totalRevenue', sortOrder = 'desc' } = req.query;
+
+    const pipeline = [
+      { $match: { role: 'seller' } },
+    ];
+
+    // Search filter
+    if (search) {
+      pipeline.push({
+        $match: {
+          $or: [
+            { businessName: { $regex: search, $options: 'i' } },
+            { phoneNumber: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } }
+          ]
+        }
+      });
+    }
+
+    // Lookup Orders
+    pipeline.push({
+      $lookup: {
+        from: 'orders',
+        localField: '_id',
+        foreignField: 'seller',
+        as: 'orders'
+      }
+    });
+
+    // Project Stats
+    pipeline.push({
+      $project: {
+        _id: 1,
+        businessName: 1,
+        email: 1,
+        phoneNumber: 1,
+        sellerStatus: 1,
+        rating: 1,
+        createdAt: 1,
+        totalOrders: { $size: "$orders" },
+        totalRevenue: {
+          $reduce: {
+            input: "$orders",
+            initialValue: 0,
+            in: { $add: ["$$value", { $ifNull: ["$$this.pricing.grandTotal", 0] }] }
+          }
+        },
+        completedOrders: {
+          $size: {
+            $filter: {
+              input: "$orders",
+              as: "order",
+              cond: { $eq: ["$$order.status", "completed"] }
+            }
+          }
+        },
+        cancelledOrders: {
+          $size: {
+            $filter: {
+              input: "$orders",
+              as: "order",
+              cond: { $eq: ["$$order.status", "cancelled"] }
+            }
+          }
+        },
+        pendingOrders: {
+          $size: {
+            $filter: {
+              input: "$orders",
+              as: "order",
+              cond: { $in: ["$$order.status", ["pending", "assigned", "accepted", "pickup_ready", "in_transit", "delivered", "refill_requested", "return_requested"]] }
+            }
+          }
+        }
+      }
+    });
+
+    // Sort
+    const sortStage = {};
+    sortStage[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    pipeline.push({ $sort: sortStage });
+
+    // Pagination Facet
+    const limitVal = parseInt(limit);
+    const pageVal = parseInt(page);
+    const skipVal = (pageVal - 1) * limitVal;
+
+    pipeline.push({
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [{ $skip: skipVal }, { $limit: limitVal }]
+      }
+    });
+
+    const result = await User.aggregate(pipeline);
+
+    const sellers = result[0].data;
+    const total = result[0].metadata[0] ? result[0].metadata[0].total : 0;
+
+    res.json({
+      success: true,
+      data: {
+        sellers,
+        pagination: {
+          currentPage: pageVal,
+          totalPages: Math.ceil(total / limitVal),
+          totalSellers: total,
+          limit: limitVal
+        }
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};

@@ -63,6 +63,61 @@ router.use(authorize('admin'));
 // Add this route
 /**
  * @swagger
+ * /admin/analytics/sellers:
+ *   get:
+ *     summary: Get detailed seller analytics
+ *     description: Retrieve all sellers with calculated stats like total revenue, order counts (pending/completed/cancelled).
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: page
+ *         in: query
+ *         schema: { type: integer, default: 1 }
+ *       - name: limit
+ *         in: query
+ *         schema: { type: integer, default: 20 }
+ *       - name: search
+ *         in: query
+ *         schema: { type: string }
+ *         description: Search by business name, phone, or email
+ *       - name: sortBy
+ *         in: query
+ *         schema: { type: string, enum: [totalRevenue, totalOrders, businessName], default: totalRevenue }
+ *       - name: sortOrder
+ *         in: query
+ *         schema: { type: string, enum: [asc, desc], default: desc }
+ *     responses:
+ *       200:
+ *         description: List of sellers with analytics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     sellers:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           totalRevenue: { type: number }
+ *                           totalOrders: { type: number }
+ *                           completedOrders: { type: number }
+ *                           pendingOrders: { type: number }
+ *                           cancelledOrders: { type: number }
+ *                           businessName: { type: string }
+ *                           phoneNumber: { type: string }
+ *                           email: { type: string }
+ *                     pagination: { type: object }
+ */
+router.get('/analytics/sellers', adminController.getSellerAnalytics);
+
+/**
+ * @swagger
  * /admin/dashboard/widgets:
  *   get:
  *     summary: Get dashboard widgets data (totals, monthly stats, order status)
