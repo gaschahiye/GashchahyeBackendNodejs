@@ -430,6 +430,44 @@ const scanQRCode = async (req, res, next) => {
       return res.json({ success: true, message: 'Delivery Confirmed', order });
     }
 
+    // --- RETURN PICKUP AT BUYER (PURE RETURN) ---
+    else if (order.status === 'return_pickup') {
+      // Driver is at Buyer's location to pick up the empty cylinder
+      // We expect them to scan the cylinder they are picking up
+
+      const pickingUpCylinder = order.existingCylinder;
+      if (!pickingUpCylinder) {
+        return res.status(400).json({ success: false, message: 'No cylinder info found for this return' });
+      }
+
+      // 1. Verify QR
+      if (pickingUpCylinder.qrCode !== qrCode) {
+        return res.status(400).json({
+          success: false,
+          message: 'Incorrect Cylinder! Scan the specific cylinder requested for return.'
+        });
+      }
+
+      // 2. Update Status to 'empty_return' (so Phase 3 can handle the drop-off)
+      order.status = 'empty_return';
+      order.statusHistory.push({
+        status: 'empty_return',
+        updatedBy: req.user._id,
+        notes: 'Driver picked up return cylinder from buyer.'
+      });
+
+      // 3. Update Cylinder Status
+      await Cylinder.findByIdAndUpdate(pickingUpCylinder._id, {
+        status: 'in_transit',
+        currentLocation: req.user.currentLocation
+      });
+
+      await order.save();
+      await NotificationService.sendOrderNotification(order, 'order_status_update');
+
+      return res.json({ success: true, message: 'Return Pickup Confirmed. Proceed to Seller.', order });
+    }
+
     // --- PHASE 3: RETURN DROP OFF AT SELLER (REFILLS ONLY) ---
     else if (['delivered', 'empty_return'].includes(order.status)) { // Accepts both for backward compatibility
 
