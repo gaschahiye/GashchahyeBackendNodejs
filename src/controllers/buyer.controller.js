@@ -746,7 +746,7 @@ const requestReturnAndRate = async (req, res, next) => {
       syncOrderTimelineToSheet(newOrder, cylinder.seller, cylinder.buyer);
 
       // Update Cylinder
-      cylinder.status = "returned";
+      cylinder.status = "return_requested"; // Correct status for pending pickup
       cylinder.order = newOrder._id; // <--- Point to NEW order
       cylinder.assignedOrder = newOrder._id;
       await cylinder.save({ session });

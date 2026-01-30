@@ -80,7 +80,7 @@ const cylinderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['active', 'empty', 'in_refill', 'returned', 'refill_return'],
+    enum: ['active', 'empty', 'in_refill', 'returned', 'refill_return', 'return_requested'],
     default: 'active'
   },
   currentLocation: {
