@@ -17,7 +17,7 @@ const getAssignedOrders = async (req, res, next) => {
     if (status === "assigned") {
       query.status = { $in: ["assigned", "qrgenerated", "accepted"] };
     }
-    else if (status === "return_assigned") {
+    else if (status === "return_requested") {
       query.status = { $in: ["return_pickup", "return_requested"] };
     }
 
