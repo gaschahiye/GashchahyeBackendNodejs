@@ -26,7 +26,7 @@ const getAssignedOrders = async (req, res, next) => {
       Order.find(query)
         .populate('buyer', 'fullName phoneNumber addresses')
         .populate('seller', 'businessName phoneNumber')
-        .populate('existingCylinder')
+        .populate('existingCylinder', 'serialNumber customName qrCode size status weights cylinderPhoto')
         .populate('deliveredCylinders', 'serialNumber customName weights') // Show Fresh Cylinders (List)
         .sort({ createdAt: -1 })
         .skip(skip)
