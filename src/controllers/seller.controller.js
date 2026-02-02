@@ -893,7 +893,7 @@ const getDashboardStats = async (req, res, next) => {
       Order.countDocuments({ seller: sellerId, status: { $in: ['pending', 'assigned', 'refill_requested'] } }),
       Order.countDocuments({ seller: sellerId, status: { $in: ['pickup_ready', 'in_transit'] } }),
       Order.countDocuments({ seller: sellerId, status: 'completed' }),
-      Order.countDocuments({ seller: sellerId, orderType: 'return', status: 'return_requested' }),
+      Order.countDocuments({ seller: sellerId, orderType: 'return', status: { $in: ['return_requested', 'return_pickup'] } }),
       Order.countDocuments({ seller: sellerId, orderType: 'refill', status: 'refill_requested' }),
     ]);
 
