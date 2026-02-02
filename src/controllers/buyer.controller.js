@@ -719,7 +719,7 @@ const requestReturnAndRate = async (req, res, next) => {
 
       if (driver) {
         newOrder.driver = driver._id;
-        newOrder.status = 'return_requested';
+        newOrder.status = 'return_pickup';
         newOrder.statusHistory.push({
           status: 'return_pickup',
           updatedBy: driver._id,

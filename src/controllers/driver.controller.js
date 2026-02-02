@@ -26,7 +26,7 @@ const getAssignedOrders = async (req, res, next) => {
       Order.find(query)
         .populate('buyer', 'fullName phoneNumber addresses')
         .populate('seller', 'businessName phoneNumber')
-        .populate('existingCylinder', 'serialNumber customName qrCode')
+        .populate('existingCylinder')
         .populate('deliveredCylinders', 'serialNumber customName weights') // Show Fresh Cylinders (List)
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -431,7 +431,7 @@ const scanQRCode = async (req, res, next) => {
     }
 
     // --- RETURN PICKUP AT BUYER (PURE RETURN) ---
-    else if (order.status === 'return_pickup') {
+    else if (['return_pickup', 'return_requested'].includes(order.status)) {
       // Driver is at Buyer's location to pick up the empty cylinder
       // We expect them to scan the cylinder they are picking up
 
@@ -440,8 +440,8 @@ const scanQRCode = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'No cylinder info found for this return' });
       }
 
-      // 1. Verify QR
-      if (pickingUpCylinder.qrCode !== qrCode) {
+      // 1. Verify QR (Allow matching against QR Code OR Serial Number)
+      if (pickingUpCylinder.qrCode !== qrCode && pickingUpCylinder.serialNumber !== qrCode) {
         return res.status(400).json({
           success: false,
           message: 'Incorrect Cylinder! Scan the specific cylinder requested for return.'
@@ -492,7 +492,7 @@ const scanQRCode = async (req, res, next) => {
       console.log(`qrCode: ${qrCode}`);
       console.log(`returnedCylinder.qrCode: ${returnedCylinder.qrCode}`);
       console.log(`returnedCylinder.serialNumber: ${returnedCylinder.serialNumber}`);
-      if (returnedCylinder.qrCode !== qrCode) {
+      if (returnedCylinder.qrCode !== qrCode && returnedCylinder.serialNumber !== qrCode) {
         return res.status(400).json({
           success: false,
           message: 'Incorrect Cylinder! Scan the cylinder you picked up from Buyer.'
@@ -700,7 +700,7 @@ const getDriverDashboard = async (req, res, next) => {
     ] = await Promise.all([
       Order.countDocuments({ driver: driverId, status: { $in: ['assigned', 'qrgenerated', 'accepted'] } }),
       Order.countDocuments({ driver: driverId, status: { $in: ['in_transit'] } }),
-      Order.countDocuments({ driver: driverId, status: 'delivered' }),
+      Order.countDocuments({ driver: driverId, status: 'completed' }),
       Order.countDocuments({ driver: driverId, orderType: 'return', status: { $in: ['return_requested', 'return_pickup'] } }),
       Order.countDocuments({ driver: driverId, orderType: 'refill', status: { $in: ['refill_requested', 'assigned', 'in_transit'] } }), // Renamed for clarity
       Order.countDocuments({ driver: driverId, status: 'empty_return' }), // NEW: User Requested "Return Empty Cylinder" section
