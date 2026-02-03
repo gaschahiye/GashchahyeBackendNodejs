@@ -174,6 +174,20 @@ class NotificationService {
                     title: 'Order Delivered',
                     message: `Order ${orderId} has been delivered to customer.`
                 }
+            },
+            empty_return: {
+                seller: {
+                    title: 'Return Update',
+                    message: `Empty cylinder is returning to you (Swap).`
+                },
+                buyer: {
+                    title: 'Return Picked Up',
+                    message: `Driver has picked up the empty cylinder from you.`
+                },
+                driver: {
+                    title: 'Return Collected',
+                    message: `Empty cylinder collected. Return to seller.`
+                }
             }
         };
 
@@ -193,9 +207,9 @@ class NotificationService {
         for (const [role, content] of Object.entries(template)) {
             let userId;
 
-            if (role === 'buyer') userId = buyer;
-            else if (role === 'seller') userId = seller;
-            else if (role === 'driver') userId = driver;
+            if (role === 'buyer') userId = buyer?._id || buyer;
+            else if (role === 'seller') userId = seller?._id || seller;
+            else if (role === 'driver') userId = driver?._id || driver;
 
             if (userId) {
                 try {

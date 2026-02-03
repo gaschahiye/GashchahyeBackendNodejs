@@ -738,6 +738,13 @@ const requestReturnAndRate = async (req, res, next) => {
           { $set: { driverStatus: 'available' } },
           { session }
         );
+
+        // Notify Driver & Seller of the new assignment
+        // We use newOrder (which has driver field populated with id, but need to be careful if sendOrderNotification expects populated obj)
+        // sendOrderNotification populates internaly? No, it expects order.driver to be ID or Object
+        // But logic in sendOrderNotification: const { buyer, seller, driver ... } = order.
+        // If driver is just ID, it works.
+        await NotificationService.sendOrderNotification(newOrder, 'return_pickup');
       }
 
       await newOrder.save({ session });

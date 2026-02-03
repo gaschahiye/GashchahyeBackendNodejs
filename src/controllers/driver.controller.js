@@ -409,6 +409,8 @@ const scanQRCode = async (req, res, next) => {
           notes: 'Refill Delivered. Fresh handed over, Empty waiting for return at seller.'
         });
 
+        await NotificationService.sendOrderNotification(order, 'empty_return');
+
       } else {
         // NEW ORDER / OTHER LOGIC: Just Delivery
         order.status = 'delivered'; // Should this go to completed? 
