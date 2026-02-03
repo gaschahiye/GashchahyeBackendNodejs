@@ -123,7 +123,7 @@ const acceptOrder = async (req, res, next) => {
       perCylinderSecurity = order.existingCylinder?.securityFee || 0;
     } else {
       // For New Orders, use the charged price
-      perCylinderSecurity = rder.pricing.securityCharges;
+      perCylinderSecurity = order.pricing.securityCharges;
     }
 
     console.log(`💰 DEBUG: Security Fee Per Cylinder: ${perCylinderSecurity}`);
