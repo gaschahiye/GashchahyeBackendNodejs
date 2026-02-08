@@ -61,8 +61,11 @@ const acceptOrder = async (req, res, next) => {
     const { orderId } = req.params;
     const { cylinders } = req.body; // Expecting an array of cylinder objects
 
-    console.log(`🔍 DEBUG: acceptOrder called for ${orderId}`);
-    console.log('📦 Payload:', JSON.stringify(req.body, null, 2));
+    console.log(`\n🔍 DEBUG: acceptOrder called for ${orderId}`);
+    console.log('📦 Payload Cylinders Count:', cylinders ? cylinders.length : 'N/A');
+    if (cylinders && cylinders.length > 0) {
+      console.log('📦 First Cylinder Sample:', JSON.stringify(cylinders[0], null, 2));
+    }
 
     const order = await Order.findById(orderId)
       .populate('buyer')
@@ -75,7 +78,7 @@ const acceptOrder = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    console.log(`✅ DEBUG: Order found. Status: ${order.status}`);
+    console.log(`✅ DEBUG: Order found. Status: ${order.status}, Type: ${order.orderType}`);
     console.log(`   Warehouse: ${order.warehouse?._id}`);
     console.log(`   ExistingCylinder: ${order.existingCylinder?._id}`);
 
@@ -113,8 +116,6 @@ const acceptOrder = async (req, res, next) => {
     }
 
     console.log('📍 DEBUG: Determined Cylinder Location:', JSON.stringify(cylinderLocation));
-    console.log('   User Location:', JSON.stringify(req.user.currentLocation));
-    console.log('   Warehouse Location:', JSON.stringify(order.warehouse?.location));
 
     // Calculate security fee per cylinder
     let perCylinderSecurity = 0;
@@ -126,82 +127,94 @@ const acceptOrder = async (req, res, next) => {
       perCylinderSecurity = order.pricing.securityCharges;
     }
 
-    console.log(`💰 DEBUG: Security Fee Per Cylinder: ${perCylinderSecurity}`);
-    console.log(`   Order Type: ${order.orderType}`);
-    console.log(`   Order Pricing Security: ${order.pricing.securityCharges}`);
-    console.log(`   Existing Cylinder Security: ${order.existingCylinder?.securityFee}`);
-
     // Iterate over cylinders
     const createdCylinders = []; // Track ALL created/updated cylinders
+
     for (const [index, cyl] of cylinders.entries()) {
-      const {
-        cylinderPhoto,
-        tareWeight,
-        netWeight,
-        grossWeight,
-        serialNumber,
-        weightDifference
-      } = cyl;
+      try {
+        const {
+          cylinderPhoto,
+          tareWeight,
+          netWeight,
+          grossWeight,
+          serialNumber,
+          weightDifference
+        } = cyl;
 
-      // Upload cylinder photo if provided
-      let cylinderPhotoUrl = null;
-      if (cylinderPhoto) {
-        cylinderPhotoUrl = await uploadService.uploadImage(
-          Buffer.from(cylinderPhoto, 'base64'),
-          `cylinder-${orderId}-${index + 1}.jpg`,
-          'image/jpeg'
-        );
-      }
+        // Upload cylinder photo if provided
+        let cylinderPhotoUrl = null;
+        if (cylinderPhoto) {
+          try {
+            cylinderPhotoUrl = await uploadService.uploadImage(
+              Buffer.from(cylinderPhoto, 'base64'),
+              `cylinder-${orderId}-${index + 1}.jpg`,
+              'image/jpeg'
+            );
+          } catch (uploadErr) {
+            console.error(`⚠️ WARNING: Failed to upload photo for cylinder ${index + 1}:`, uploadErr.message);
+          }
+        }
 
-      // Add to verification array
-      order.cylinderVerification.push({
-        photo: cylinderPhotoUrl,
-        tareWeight: parseFloat(tareWeight),
-        netWeight: parseFloat(netWeight),
-        grossWeight: parseFloat(grossWeight),
-        serialNumber,
-        weightDifference: parseFloat(weightDifference),
-        verifiedAt: new Date()
-      });
+        // Add to verification array
+        order.cylinderVerification.push({
+          photo: cylinderPhotoUrl,
+          tareWeight: parseFloat(tareWeight),
+          netWeight: parseFloat(netWeight),
+          grossWeight: parseFloat(grossWeight),
+          serialNumber,
+          weightDifference: parseFloat(weightDifference),
+          verifiedAt: new Date()
+        });
 
-      console.log(`   ➡ Processing Cylinder Serial: ${serialNumber}`);
+        console.log(`   ➡ Processing Cylinder Serial: ${serialNumber}`);
 
-      // Update or create Cylinder if it's a new order OR refill
-      if (order.orderType === 'new' || order.orderType === 'refill') {
-        const freshCylinder = await Cylinder.findOneAndUpdate(
-          { serialNumber: serialNumber },
-          {
-            weights: {
-              tareWeight: parseFloat(tareWeight),
-              netWeight: parseFloat(netWeight),
-              grossWeight: parseFloat(grossWeight),
-              weightDifference: parseFloat(weightDifference)
+        // Update or create Cylinder if it's a new order OR refill
+        if (order.orderType === 'new' || order.orderType === 'refill') {
+          const freshCylinder = await Cylinder.findOneAndUpdate(
+            { serialNumber: serialNumber },
+            {
+              weights: {
+                tareWeight: parseFloat(tareWeight),
+                netWeight: parseFloat(netWeight),
+                grossWeight: parseFloat(grossWeight),
+                weightDifference: parseFloat(weightDifference)
+              },
+              cylinderPhoto: cylinderPhotoUrl,
+              // serialNumber is in filter
+              seller: order.seller._id,
+              SellerName: order.seller.businessName,
+              buyer: order.buyer?._id || null, // Buyer might be null if just 'assigned' but cleaner to set if we have it? Usually order.buyer is set.
+              securityFee: perCylinderSecurity,
+              order: order._id,
+              size: order.cylinderSize,
+              customName: `Cylinder ${order.cylinderSize}`, // Ensure name is set
+              status: 'active', // Explicitly set status to active upon issuance
+              currentLocation: cylinderLocation,
+              warehouse: order.orderType === 'refill' ? order.existingCylinder?.warehouse : order.warehouse,
+              qrCode: `${order._id}-${index + 1}`, // Generate unique QR for each cylinder
+              lastUpdated: new Date()
             },
-            cylinderPhoto: cylinderPhotoUrl,
-            // serialNumber is in filter
-            seller: order.seller._id,
-            SellerName: order.seller.businessName,
-            buyer: order.buyer?._id || null,
-            securityFee: perCylinderSecurity,
-            order: order._id,
-            size: order.cylinderSize,
-            customName: `Cylinder ${order.cylinderSize}`, // Ensure name is set
-            status: 'active', // Explicitly set status to active upon issuance
-            currentLocation: cylinderLocation,
-            warehouse: order.orderType === 'refill' ? order.existingCylinder?.warehouse : order.warehouse,
-            qrCode: `${order._id}-${index + 1}`, // Generate unique QR for each cylinder
-            lastUpdated: new Date()
-          },
-          { upsert: true, new: true }
-        );
+            { upsert: true, new: true }
+          );
 
-        createdCylinders.push(freshCylinder);
-        console.log(`   ✅ Cylinder Saved: ${freshCylinder._id} (${freshCylinder.serialNumber})`);
+          createdCylinders.push(freshCylinder);
+          console.log(`   ✅ Cylinder Saved: ${freshCylinder._id} (${freshCylinder.serialNumber})`);
+        } else {
+          console.log(`⚠️ WARNING: Cylinder creation skipped because orderType is '${order.orderType}'`);
+        }
+      } catch (innerError) {
+        console.error(`❌ ERROR creating cylinder ${index + 1}:`, innerError);
+        // Continue to next cylinder instead of failing entire request?
+        // But if we fail to create cylinder, data is lost. 
+        // Better to throw? Or at least log heavily.
       }
     }
 
     if (createdCylinders.length > 0) {
       order.deliveredCylinders = createdCylinders.map(c => c._id); // Link ALL Fresh Cylinders
+      console.log(`🔗 Linked ${createdCylinders.length} cylinders to Order.`);
+    } else {
+      console.log('⚠️ WARNING: No cylinders were created/linked to this order.');
     }
 
     order.status = 'accepted';
@@ -213,6 +226,7 @@ const acceptOrder = async (req, res, next) => {
 
     order.qrCode = orderId;
     await order.save();
+    console.log(`✅ Order ${orderId} saved with status 'accepted'.`);
 
     await NotificationService.sendOrderNotification(order, 'order_status_update');
 
@@ -222,6 +236,7 @@ const acceptOrder = async (req, res, next) => {
       // order
     });
   } catch (error) {
+    console.error("❌ CRTICAL ERROR in acceptOrder:", error);
     next(error);
   }
 };
