@@ -19,10 +19,10 @@ class QRCodeService {
 
       // Generate QR code as data URL
       const qrCodeDataURL = await QRCode.toDataURL(data, defaultOptions);
-      
+
       // Convert data URL to buffer
       const buffer = Buffer.from(qrCodeDataURL.split(',')[1], 'base64');
-      
+
       return {
         data: data,
         dataURL: qrCodeDataURL,
@@ -46,15 +46,16 @@ class QRCodeService {
         },
       });
 
+      // TODO: Uncomment when Firebase billing is updated
       // Upload to Firebase Storage
-      const qrCodeUrl = await uploadService.uploadQRCode(buffer, orderId);
+      // const qrCodeUrl = await uploadService.uploadQRCode(buffer, orderId);
 
       return {
         qrCode: orderId,
-        qrCodeUrl,
+        qrCodeUrl: null, // Returning null for now as upload is disabled
       };
     } catch (error) {
-      throw new Error(`QR code generation/upload failed: ${error.message}`);
+      throw new Error(`QR code generation failed (upload disabled): ${error.message}`);
     }
   }
 
