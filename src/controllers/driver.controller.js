@@ -346,6 +346,7 @@ const scanQRCode = async (req, res, next) => {
       // OR do they scan the Cylinder Asset Tag?
       // Let's stick to Order QR validation for the transaction start
 
+      console.log(`🔍 DEBUG SCAN (PICKUP): Received: '${qrCode}' vs Expected: '${order.qrCode}'`);
       if (order.qrCode !== qrCode) {
         // If they scanned a Cylinder Asset Tag, we might want to link it?
         // For now, strict Order QR check as per previous logic, OR verify if it matches assigned cylinder?
@@ -369,6 +370,7 @@ const scanQRCode = async (req, res, next) => {
     else if (order.status === 'in_transit') {
 
       // Validate Delivery Scan
+      console.log(`🔍 DEBUG SCAN (DELIVERY): Received: '${qrCode}' vs Expected: '${order.qrCode}'`);
       if (order.qrCode !== qrCode) {
         return res.status(400).json({ success: false, message: 'QR code does not match this order' });
       }
