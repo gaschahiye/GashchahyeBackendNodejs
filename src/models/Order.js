@@ -163,6 +163,17 @@ const orderSchema = new mongoose.Schema({
     weightDifference: Number,
     verifiedAt: Date
   }],
+  returnedCylinder: {
+    // Snapshot of the cylinder that was returned and deleted
+    serialNumber: String,
+    qrCode: String,
+    size: String,
+    tareWeight: Number,
+    netWeight: Number,
+    grossWeight: Number,
+    returnedAt: Date,
+    cylinderPhoto: String
+  },
   payment: {
     method: {
       type: String,

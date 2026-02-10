@@ -537,6 +537,18 @@ const scanQRCode = async (req, res, next) => {
         }
       }
 
+      // SAVE CYLINDER DATA BEFORE DELETION (For History)
+      order.returnedCylinder = {
+        serialNumber: returnedCylinder.serialNumber,
+        qrCode: returnedCylinder.qrCode,
+        size: returnedCylinder.size,
+        tareWeight: returnedCylinder.weights?.tareWeight,
+        netWeight: returnedCylinder.weights?.netWeight,
+        grossWeight: returnedCylinder.weights?.grossWeight,
+        cylinderPhoto: returnedCylinder.cylinderPhoto,
+        returnedAt: new Date()
+      };
+
       // DELETE CYLINDER RECORD (As per Seller requirement)
       await Cylinder.findByIdAndDelete(returnedCylinder._id);
 
