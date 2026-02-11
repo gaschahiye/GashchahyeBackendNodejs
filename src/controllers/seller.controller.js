@@ -34,16 +34,25 @@ const addLocation = async (req, res, next) => {
       });
     }
 
-    const formattedLocations = locations.map((loc) => ({
-      seller: req.user._id,
-      warehouseName: loc.warehouseName,
-      city: loc.city,
-      address: loc.address,
-      location: {
-        type: 'Point',
-        coordinates: loc.location.coordinates
-      }
-    }));
+    const formattedLocations = locations.map((loc) => {
+      const coords = loc.location.coordinates;
+      // MongoDB requires [Longitude, Latitude]. 
+      // If the first coordinate is < 50 (typical Latitude for this region) 
+      // and the second is > 60 (typical Longitude), we swap them to be safe.
+      const lng = coords[0] < 50 && coords[1] > 60 ? coords[1] : coords[0];
+      const lat = coords[0] < 50 && coords[1] > 60 ? coords[0] : coords[1];
+
+      return {
+        seller: req.user._id,
+        warehouseName: loc.warehouseName,
+        city: loc.city,
+        address: loc.address,
+        location: {
+          type: 'Point',
+          coordinates: [lng, lat]
+        }
+      };
+    });
 
     const newLocations = await Location.insertMany(formattedLocations);
 
@@ -86,7 +95,12 @@ const updateLocation = async (req, res, next) => {
     if (updates.warehouseName) location.warehouseName = updates.warehouseName;
     if (updates.city) location.city = updates.city;
     if (updates.address) location.address = updates.address;
-    if (updates.location) location.location.coordinates = updates.location.coordinates;
+    if (updates.location && updates.location.coordinates) {
+      const coords = updates.location.coordinates;
+      const lng = coords[0] < 50 && coords[1] > 60 ? coords[1] : coords[0];
+      const lat = coords[0] < 50 && coords[1] > 60 ? coords[0] : coords[1];
+      location.location.coordinates = [lng, lat];
+    }
     if (typeof updates.isActive === 'boolean') location.isActive = updates.isActive;
 
     await location.save();

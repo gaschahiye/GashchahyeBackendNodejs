@@ -24,7 +24,13 @@ const addAddress = async (req, res, next) => {
           {
             label,
             address,
-            location: { type: 'Point', coordinates: location.coordinates },
+            location: {
+              type: 'Point',
+              coordinates: [
+                location.coordinates[0] < 50 && location.coordinates[1] > 60 ? location.coordinates[1] : location.coordinates[0],
+                location.coordinates[0] < 50 && location.coordinates[1] > 60 ? location.coordinates[0] : location.coordinates[1]
+              ]
+            },
             isDefault
           }
         ]
@@ -45,7 +51,7 @@ const addAddress = async (req, res, next) => {
 
 const getNearbySellers = async (req, res, next) => {
   try {
-    const { lat, lng, radius = 5000, sortBy = 'distance' } = req.query;
+    const { lat, lng, radius = 25000, sortBy = 'distance' } = req.query;
 
     if (!lat || !lng) {
       return res.status(400).json({
