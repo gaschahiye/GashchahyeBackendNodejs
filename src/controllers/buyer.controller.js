@@ -305,8 +305,9 @@ const createOrder = async (req, res, next) => {
         path: 'warehouse',
         select: 'location city'
       })
-      .populate('buyer', 'name phoneNumber')
-      .populate('seller', 'businessName phoneNumber');
+      .populate('buyer', 'fullName phoneNumber')
+      .populate('seller', 'businessName phoneNumber')
+      .populate('driver', 'fullName phoneNumber');
 
     // ✅ Centralized Notification (Admin, Seller, Buyer)
     await NotificationService.sendOrderNotification(responseOrder, 'order_created');
@@ -488,6 +489,9 @@ const requestRefill = async (req, res, next) => {
 
       // Prepare response
       const populated = await Order.findById(newOrder._id)
+        .populate('buyer', 'fullName phoneNumber')
+        .populate('seller', 'businessName phoneNumber')
+        .populate('driver', 'fullName phoneNumber')
         .populate({ path: 'warehouse', select: 'location city' })
         .session(session);
 
@@ -603,6 +607,7 @@ const getOrders = async (req, res, next) => {
     const [orders, total] = await Promise.all([
       Order.find(query)
         .populate('buyer', 'fullName phoneNumber addresses')
+        .populate('seller', 'businessName phoneNumber')
         .populate('driver', 'fullName vehicleNumber phoneNumber')
         .populate('existingCylinder', 'serialNumber customName')
         .sort({ createdAt: -1 })
@@ -786,7 +791,9 @@ const requestReturnAndRate = async (req, res, next) => {
 
       // Populate response
       const populated = await Order.findById(newOrder._id)
-        .populate({ path: "driver", select: "fullName phoneNumber driverStatus" })
+        .populate('buyer', 'fullName phoneNumber')
+        .populate('seller', 'businessName phoneNumber')
+        .populate('driver', 'fullName phoneNumber driverStatus')
         .populate({ path: "warehouse", select: "location city" })
         .session(session);
 

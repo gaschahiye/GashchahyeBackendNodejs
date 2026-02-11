@@ -32,6 +32,7 @@ const getAssignedOrders = async (req, res, next) => {
       Order.find(query)
         .populate('buyer', 'fullName phoneNumber addresses')
         .populate('seller', 'businessName phoneNumber')
+        .populate('driver', 'fullName phoneNumber')
         .populate('existingCylinder', 'serialNumber customName qrCode size status weights cylinderPhoto')
         .populate('deliveredCylinders', 'serialNumber customName weights') // Show Fresh Cylinders (List)
         .sort({ createdAt: -1 })
@@ -328,7 +329,7 @@ const printQRCode = async (req, res, next) => {
 const scanQRCode = async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const { qrCode } = req.body;
+    const { qrCode, signature } = req.body; // Accept signature Base64
 
     const order = await Order.findById(orderId)
       .populate('buyer')
@@ -346,11 +347,14 @@ const scanQRCode = async (req, res, next) => {
       // OR do they scan the Cylinder Asset Tag?
       // Let's stick to Order QR validation for the transaction start
 
-      console.log(`🔍 DEBUG SCAN (PICKUP): Received: '${qrCode}' vs Expected: '${order.qrCode}'`);
-      if (order.qrCode !== qrCode) {
+      console.log(`🔍 DEBUG SCAN (PICKUP): Received: '${qrCode}' vs Expected: '${order.existingCylinder?.qrCode}'`);
+
+      const cylinderQr = order.existingCylinder?.qrCode || "";
+      const strippedCylinderQr = cylinderQr.includes('-') ? cylinderQr.split('-').slice(0, -1).join('-') : cylinderQr;
+
+      if (cylinderQr !== qrCode && strippedCylinderQr !== qrCode && order.existingCylinder?.serialNumber !== qrCode) {
         // If they scanned a Cylinder Asset Tag, we might want to link it?
-        // For now, strict Order QR check as per previous logic, OR verify if it matches assigned cylinder?
-        // Let's assume strict Order QR for pickup confirmation.
+        // For now, allow matching against Full QR, Stripped QR (Order ID part), or Serial Number
         return res.status(400).json({ success: false, message: 'QR code does not match this order' });
       }
 
@@ -420,6 +424,25 @@ const scanQRCode = async (req, res, next) => {
         });
 
         order.status = 'empty_return'; // Status Change: 'delivered' -> 'empty_return' per User Request
+
+        // SAVE MULTI-SIGNATURE (Swap confirmation)
+        if (signature) {
+          try {
+            const sigUrl = await uploadService.uploadImage(
+              Buffer.from(signature, 'base64'),
+              `customer-swap-${orderId}.jpg`,
+              'image/jpeg'
+            );
+            order.customerSignatureUrl = sigUrl;
+            order.customerSignedAt = new Date();
+            order.returnCustomerSignatureUrl = sigUrl; // Confirmation of empty handover
+            order.returnCustomerSignedAt = new Date();
+            console.log(`✅ Customer swap signature uploaded: ${sigUrl}`);
+          } catch (uploadErr) {
+            console.error(`⚠️ Failed to upload swap signature:`, uploadErr.message);
+          }
+        }
+
         order.statusHistory.push({
           status: 'empty_return',
           updatedBy: req.user._id,
@@ -449,6 +472,23 @@ const scanQRCode = async (req, res, next) => {
       }
 
       order.actualDeliveryTime = new Date();
+
+      // SAVE CUSTOMER SIGNATURE
+      if (signature) {
+        try {
+          const sigUrl = await uploadService.uploadImage(
+            Buffer.from(signature, 'base64'),
+            `customer-sig-${orderId}.jpg`,
+            'image/jpeg'
+          );
+          order.customerSignatureUrl = sigUrl;
+          order.customerSignedAt = new Date();
+          console.log(`✅ Customer signature uploaded: ${sigUrl}`);
+        } catch (uploadErr) {
+          console.error(`⚠️ Failed to upload customer signature:`, uploadErr.message);
+        }
+      }
+
       await order.save();
       await NotificationService.sendOrderNotification(order, 'delivery_confirmed');
 
@@ -465,8 +505,11 @@ const scanQRCode = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'No cylinder info found for this return' });
       }
 
-      // 1. Verify QR (Allow matching against QR Code OR Serial Number)
-      if (pickingUpCylinder.qrCode !== qrCode && pickingUpCylinder.serialNumber !== qrCode) {
+      // 1. Verify QR (Allow matching against Full QR, Stripped QR (Order ID part), or Serial Number)
+      const cylinderQr = pickingUpCylinder.qrCode || "";
+      const strippedCylinderQr = cylinderQr.includes('-') ? cylinderQr.split('-').slice(0, -1).join('-') : cylinderQr;
+
+      if (cylinderQr !== qrCode && strippedCylinderQr !== qrCode && pickingUpCylinder.serialNumber !== qrCode) {
         return res.status(400).json({
           success: false,
           message: 'Incorrect Cylinder! Scan the specific cylinder requested for return.'
@@ -486,6 +529,22 @@ const scanQRCode = async (req, res, next) => {
         status: 'in_transit',
         currentLocation: req.user.currentLocation
       });
+
+      // SAVE CUSTOMER SIGNATURE (Confirmation of Return Pickup)
+      if (signature) {
+        try {
+          const sigUrl = await uploadService.uploadImage(
+            Buffer.from(signature, 'base64'),
+            `customer-return-pickup-${orderId}.jpg`,
+            'image/jpeg'
+          );
+          order.returnCustomerSignatureUrl = sigUrl;
+          order.returnCustomerSignedAt = new Date();
+          console.log(`✅ Customer return pickup signature uploaded: ${sigUrl}`);
+        } catch (uploadErr) {
+          console.error(`⚠️ Failed to upload return pickup signature:`, uploadErr.message);
+        }
+      }
 
       await order.save();
       await NotificationService.sendOrderNotification(order, 'order_status_update');
@@ -511,13 +570,17 @@ const scanQRCode = async (req, res, next) => {
         return res.status(404).json({ success: false, message: 'Returned cylinder record not found' });
       }
 
-      // VERIFY SCANNED QR (Allow QR Code OR Serial Number)
-      // Expecting Scanned QR to be the Cylinder's Permanent Tag or Serial
+      // VERIFY SCANNED QR (Allow matching against Full QR, Stripped QR (Order ID part), or Serial Number)
+      // Expecting Scanned QR to be the Cylinder's Permanent Tag, Serial, or the Order ID part of the Tag
 
       console.log(`qrCode: ${qrCode}`);
       console.log(`returnedCylinder.qrCode: ${returnedCylinder.qrCode}`);
       console.log(`returnedCylinder.serialNumber: ${returnedCylinder.serialNumber}`);
-      if (returnedCylinder.qrCode !== qrCode && returnedCylinder.serialNumber !== qrCode) {
+
+      const cylinderQr = returnedCylinder.qrCode || "";
+      const strippedCylinderQr = cylinderQr.includes('-') ? cylinderQr.split('-').slice(0, -1).join('-') : cylinderQr;
+
+      if (cylinderQr !== qrCode && strippedCylinderQr !== qrCode && returnedCylinder.serialNumber !== qrCode) {
         return res.status(400).json({
           success: false,
           message: 'Incorrect Cylinder! Scan the cylinder you picked up from Buyer.'
@@ -546,8 +609,25 @@ const scanQRCode = async (req, res, next) => {
         netWeight: returnedCylinder.weights?.netWeight,
         grossWeight: returnedCylinder.weights?.grossWeight,
         cylinderPhoto: returnedCylinder.cylinderPhoto,
+        customerSignatureUrl: order.returnCustomerSignatureUrl, // Preserve the customer sign-off in history
         returnedAt: new Date()
       };
+
+      // SAVE SELLER SIGNATURE (Warehouse Confirmation)
+      if (signature) {
+        try {
+          const sigUrl = await uploadService.uploadImage(
+            Buffer.from(signature, 'base64'),
+            `seller-receipt-${orderId}.jpg`,
+            'image/jpeg'
+          );
+          order.returnedCylinder.sellerSignatureUrl = sigUrl;
+          order.returnedCylinder.sellerSignedAt = new Date();
+          console.log(`✅ Seller receipt signature uploaded: ${sigUrl}`);
+        } catch (uploadErr) {
+          console.error(`⚠️ Failed to upload seller receipt signature:`, uploadErr.message);
+        }
+      }
 
       // DELETE CYLINDER RECORD (As per Seller requirement)
       await Cylinder.findByIdAndDelete(returnedCylinder._id);

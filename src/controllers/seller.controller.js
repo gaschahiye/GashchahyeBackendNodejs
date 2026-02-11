@@ -465,6 +465,7 @@ const getOrders = async (req, res, next) => {
     const [orders, total] = await Promise.all([
       Order.find(query)
         .populate('buyer', 'fullName phoneNumber addresses')
+        .populate('seller', 'businessName phoneNumber')
         .populate('driver', 'fullName vehicleNumber phoneNumber')
         .populate('existingCylinder', 'serialNumber customName')
         .sort({ createdAt: -1 })
@@ -604,9 +605,15 @@ const approveRefill = async (req, res, next) => {
     const notifyEvent = driver ? 'refill_pickup' : 'order_assigned'; // reuse 'order_assigned' for generic 'ready'
     await NotificationService.sendOrderNotification(order, notifyEvent);
 
+    const responseOrder = await Order.findById(order._id)
+      .populate('buyer', 'fullName phoneNumber')
+      .populate('seller', 'businessName phoneNumber')
+      .populate('driver', 'fullName phoneNumber');
+
     res.json({
       success: true,
       message: 'Refill approved and marked ready for pickup',
+      order: responseOrder,
       data: {
         orderId: order._id,
         driverAssigned: !!driver,
@@ -827,6 +834,7 @@ const getDashboardStats = async (req, res, next) => {
     })
       .populate('order', 'orderId status')
       .populate('buyer', 'fullName phoneNumber')
+      .populate('seller', 'businessName phoneNumber')
       .populate({
         path: 'warehouse',
         populate: {
@@ -999,6 +1007,7 @@ const getDashboardStatsByWarehouse = async (req, res, next) => {
     })
       .populate('order', 'orderId status')
       .populate('buyer', 'fullName phoneNumber')
+      .populate('seller', 'businessName phoneNumber')
       .populate({
         path: 'warehouse',
         populate: {

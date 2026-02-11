@@ -152,6 +152,10 @@ const orderSchema = new mongoose.Schema({
     type: String,
     unique: false,
   },
+  customerSignatureUrl: String,
+  customerSignedAt: Date,
+  returnCustomerSignatureUrl: String,
+  returnCustomerSignedAt: Date,
   qrCodePrintedAt: Date,
   qrCodeScannedAt: Date,
   cylinderVerification: [{
@@ -172,7 +176,10 @@ const orderSchema = new mongoose.Schema({
     netWeight: Number,
     grossWeight: Number,
     returnedAt: Date,
-    cylinderPhoto: String
+    cylinderPhoto: String,
+    customerSignatureUrl: String, // Customer's sign-off on the return
+    sellerSignatureUrl: String,   // Seller's sign-off on the receipt
+    sellerSignedAt: Date
   },
   payment: {
     method: {
