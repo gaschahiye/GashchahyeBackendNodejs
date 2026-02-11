@@ -991,32 +991,33 @@ const getDashboardStatsByWarehouse = async (req, res, next) => {
       (inventory.cylinders?.["6kg"]?.quantity || 0) +
       (inventory.cylinders?.["4.5kg"]?.quantity || 0);
 
-    // 🔹 Active cylinders (pickup_ready)
-    const activeCylinders = await Order.find({
+    // 🔹 Active cylinders (Refactored to fetch actual ASSETS)
+    const activeCylinders = await Cylinder.find({
       seller: sellerId,
       warehouse: inventory._id,
-      status: "pickup_ready",
+      status: { $in: ["active", "in_transit"] }
     })
+      .populate('order', 'orderId status')
+      .populate('buyer', 'fullName phoneNumber')
       .populate({
-        path: "warehouse",
+        path: 'warehouse',
         populate: {
-          path: "locationid",
-          model: "Location",
-          select: "warehouseName city address",
+          path: 'locationid',
+          model: 'Location',
+          select: 'warehouseName city address',
         },
       })
-      .populate("buyer", "name email phone")
       .lean();
 
-    const activeCylinderList = activeCylinders.map((order) => ({
-      orderId: order.orderId,
-      buyer: order.buyer,
-      status: order.status,
-      cylinderSize: order.cylinderSize,
-      quantity: order.quantity,
-      warehouseName: order.warehouse?.locationid?.warehouseName || "N/A",
-      city: order.warehouse?.locationid?.city || "N/A",
-      address: order.warehouse?.locationid?.address || "N/A",
+    const activeCylinderList = activeCylinders.map((cyl) => ({
+      orderId: cyl.order?.orderId || "N/A",
+      buyer: cyl.buyer,
+      status: cyl.status,
+      cylinderSize: cyl.size,
+      quantity: 1, // Single Asset
+      warehouseName: cyl.warehouse?.locationid?.warehouseName || "N/A",
+      city: cyl.warehouse?.locationid?.city || "N/A",
+      address: cyl.warehouse?.locationid?.address || "N/A",
     }));
 
     // 🔹 Count stats
