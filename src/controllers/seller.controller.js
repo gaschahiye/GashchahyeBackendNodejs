@@ -820,29 +820,32 @@ const getDashboardStats = async (req, res, next) => {
     }));
 
     // 4️⃣ Active cylinders
-    const activeCylinders = await Order.find({
+    // 4️⃣ Active cylinders (Refactored to fetch actual ASSETS)
+    const activeCylinders = await Cylinder.find({
       seller: sellerId,
-      status: { $nin: ['pending', 'returned', 'cancelled'] }
+      status: { $in: ['active', 'in_transit'] }
     })
+      .populate('order', 'orderId status')
+      .populate('buyer', 'fullName phoneNumber')
       .populate({
-        path: 'warehouse',            // 1️⃣ from Order to Inventory
+        path: 'warehouse',
         populate: {
-          path: 'locationid',         // 2️⃣ from Inventory to Location
+          path: 'locationid',
           model: 'Location',
           select: 'warehouseName city address',
         },
       })
       .lean();
 
-    const activeCylinderList = activeCylinders.map((order) => ({
-      orderId: order.orderId,
-      buyer: order.buyer,
-      status: order.status,
-      cylinderSize: order.cylinderSize,
-      quantity: order.quantity,
-      warehouseName: order.warehouse?.locationid?.warehouseName || 'N/A',
-      city: order.warehouse?.locationid?.city || 'N/A',
-      address: order.warehouse?.locationid?.address || 'N/A',
+    const activeCylinderList = activeCylinders.map((cyl) => ({
+      orderId: cyl.order?.orderId || 'N/A',
+      buyer: cyl.buyer,
+      status: cyl.status, // Asset Status
+      cylinderSize: cyl.size,
+      quantity: 1, // Single Asset
+      warehouseName: cyl.warehouse?.locationid?.warehouseName || 'N/A',
+      city: cyl.warehouse?.locationid?.city || 'N/A',
+      address: cyl.warehouse?.locationid?.address || 'N/A',
     }));
 
     // 5️⃣ Aggregations for revenue
