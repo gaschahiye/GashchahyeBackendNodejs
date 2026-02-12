@@ -364,6 +364,14 @@ const scanQRCode = async (req, res, next) => {
       if (order.orderType === 'refill' || order.orderType === 'return') {
 
 
+
+        if (order.orderType === 'refill' && order.status === 'qrgenerated') {
+          if (order.qrCode !== qrCode) {
+            // If they scanned a Cylinder Asset Tag, we might want to link it?
+            // For now, allow matching against Full QR, Stripped QR (Order ID part), or Serial Number
+            return res.status(400).json({ success: false, message: 'QR code does not match this order' });
+          }
+        }
         if (cylinderQr !== qrCode && strippedCylinderQr !== qrCode && order.existingCylinder?.serialNumber !== qrCode) {
           // If they scanned a Cylinder Asset Tag, we might want to link it?
           // For now, allow matching against Full QR, Stripped QR (Order ID part), or Serial Number
