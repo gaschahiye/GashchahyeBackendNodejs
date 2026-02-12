@@ -105,7 +105,12 @@ class AdminService {
             'qrgenerated': 'In Progress',
             'accepted': 'In Progress',
             'delivered': 'Delivered',
-            'completed': 'Delivered'
+            'completed': 'Delivered',
+            // ✅ Fix: Map new statuses
+            'refill_requested': 'Pending',
+            'return_requested': 'Pending',
+            'return_pickup': 'In Progress',
+            'empty_return': 'In Progress'
         };
 
         const statusAggregates = {};

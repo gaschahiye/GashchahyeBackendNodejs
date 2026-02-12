@@ -314,7 +314,14 @@ exports.getOrdersOverview = async (req, res, next) => {
     const query = {};
 
     // Normalize aliases
-    if (status) query.status = status;
+    if (status) {
+      if (status === 'pending') {
+        // ✅ Fix for Admin Panel: Show Refill & Return requests in 'Pending' tab
+        query.status = { $in: ['pending', 'refill_requested', 'return_requested'] };
+      } else {
+        query.status = status;
+      }
+    }
     const finalSeller = seller || sellerId;
     const finalDriver = driver || driverId;
     const finalBuyer = buyer || buyerId;
