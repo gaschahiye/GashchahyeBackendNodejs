@@ -361,10 +361,21 @@ const scanQRCode = async (req, res, next) => {
       const cylinderQr = order.existingCylinder?.qrCode || "";
       const strippedCylinderQr = cylinderQr.includes('-') ? cylinderQr.split('-').slice(0, -1).join('-') : cylinderQr;
 
-      if (cylinderQr !== qrCode && strippedCylinderQr !== qrCode && order.existingCylinder?.serialNumber !== qrCode) {
-        // If they scanned a Cylinder Asset Tag, we might want to link it?
-        // For now, allow matching against Full QR, Stripped QR (Order ID part), or Serial Number
-        return res.status(400).json({ success: false, message: 'QR code does not match this order' });
+      if (order.orderType === 'refill' || order.orderType === 'return') {
+
+
+        if (cylinderQr !== qrCode && strippedCylinderQr !== qrCode && order.existingCylinder?.serialNumber !== qrCode) {
+          // If they scanned a Cylinder Asset Tag, we might want to link it?
+          // For now, allow matching against Full QR, Stripped QR (Order ID part), or Serial Number
+          return res.status(400).json({ success: false, message: 'QR code does not match this order' });
+        }
+      }
+      else {
+        if (order.qrCode !== qrCode) {
+          // If they scanned a Cylinder Asset Tag, we might want to link it?
+          // For now, allow matching against Full QR, Stripped QR (Order ID part), or Serial Number
+          return res.status(400).json({ success: false, message: 'QR code does not match this order' });
+        }
       }
 
       order.status = 'in_transit';
