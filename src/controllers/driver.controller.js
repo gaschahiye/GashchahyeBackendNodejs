@@ -5,6 +5,7 @@ const Inventory = require('../models/Inventory');
 const QRCodeService = require('../services/qrcode.service');
 const NotificationService = require('../services/notification.service');
 const uploadService = require('../services/upload.service');
+const { notifyOrderStatusChange } = require('../config/socket');
 const jwt = require("jsonwebtoken");
 
 const getAssignedOrders = async (req, res, next) => {
@@ -231,6 +232,9 @@ const acceptOrder = async (req, res, next) => {
 
     await NotificationService.sendOrderNotification(order, 'order_status_update');
 
+    // Notify Admin
+    notifyOrderStatusChange(order, 'assigned');
+
     res.json({
       success: true,
       message: 'Order accepted successfully',
@@ -272,6 +276,9 @@ const generateQRCode = async (req, res, next) => {
     order.qrCodeUrl = qrResult.qrCodeUrl;
     order.status = 'qrgenerated';
     await order.save();
+
+    // Notify Admin (Optional, but good for tracking)
+    notifyOrderStatusChange(order, 'accepted'); // Previous status was accepted or assigned
 
     // Do NOT overwrite Cylinder QR code. 
     // Cylinder QR is permanent asset tag. Order QR is transaction specific.
@@ -347,6 +354,8 @@ const scanQRCode = async (req, res, next) => {
       // OR do they scan the Cylinder Asset Tag?
       // Let's stick to Order QR validation for the transaction start
 
+      const oldStatus = order.status; // Capture old status
+
       console.log(`🔍 DEBUG SCAN (PICKUP): Received: '${qrCode}' vs Expected: '${order.existingCylinder?.qrCode}'`);
 
       const cylinderQr = order.existingCylinder?.qrCode || "";
@@ -367,6 +376,9 @@ const scanQRCode = async (req, res, next) => {
 
       await order.save();
       await NotificationService.sendOrderNotification(order, 'order_status_update');
+
+      notifyOrderStatusChange(order, oldStatus);
+
       return res.json({ success: true, message: 'Pickup confirmed. Order in transit.', order });
     }
 
@@ -492,6 +504,8 @@ const scanQRCode = async (req, res, next) => {
       await order.save();
       await NotificationService.sendOrderNotification(order, 'delivery_confirmed');
 
+      notifyOrderStatusChange(order, 'in_transit');
+
       return res.json({ success: true, message: 'Delivery Confirmed', order });
     }
 
@@ -499,6 +513,7 @@ const scanQRCode = async (req, res, next) => {
     else if (['return_pickup', 'return_requested'].includes(order.status)) {
       // Driver is at Buyer's location to pick up the empty cylinder
       // We expect them to scan the cylinder they are picking up
+      const oldStatus = order.status;
 
       const pickingUpCylinder = order.existingCylinder;
       if (!pickingUpCylinder) {
@@ -549,11 +564,15 @@ const scanQRCode = async (req, res, next) => {
       await order.save();
       await NotificationService.sendOrderNotification(order, 'order_status_update');
 
+      notifyOrderStatusChange(order, oldStatus);
+
       return res.json({ success: true, message: 'Return Pickup Confirmed. Proceed to Seller.', order });
     }
 
     // --- PHASE 3: RETURN DROP OFF AT SELLER (REFILLS ONLY) ---
     else if (['delivered', 'empty_return'].includes(order.status)) { // Accepts both for backward compatibility
+
+      const oldStatus = order.status;
 
       // Driver is at Seller's Warehouse with the Empty Cylinder (Cylinder B)
       // Must scan Cylinder B's QR Code to confirm return.
@@ -644,6 +663,8 @@ const scanQRCode = async (req, res, next) => {
       await User.findByIdAndUpdate(req.user._id, { driverStatus: 'available' });
 
       await NotificationService.sendOrderNotification(order, 'order_status_update'); // Notification to Seller
+
+      notifyOrderStatusChange(order, oldStatus);
 
       return res.json({ success: true, message: 'Return Verified. Order Completed.', order });
     }
@@ -789,6 +810,8 @@ const completeDelivery = async (req, res, next) => {
     );
 
     await NotificationService.sendOrderNotification(order, 'delivery_confirmed');
+
+    notifyOrderStatusChange(order, 'in_transit');
 
     res.json({
       success: true,

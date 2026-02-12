@@ -8,6 +8,7 @@ const Cylinder = require('../models/Cylinder');
 const InvoiceService = require('../services/invoice.service');
 const NotificationService = require('../services/notification.service');
 const { startSession } = require("mongoose");
+const { notifyOrderStatusChange } = require('../config/socket');
 
 
 
@@ -619,6 +620,9 @@ const approveRefill = async (req, res, next) => {
     const notifyEvent = driver ? 'refill_pickup' : 'order_assigned'; // reuse 'order_assigned' for generic 'ready'
     await NotificationService.sendOrderNotification(order, notifyEvent);
 
+    // Notify Admin of Status Change
+    notifyOrderStatusChange(order, 'refill_requested');
+
     const responseOrder = await Order.findById(order._id)
       .populate('buyer', 'fullName phoneNumber')
       .populate('seller', 'businessName phoneNumber')
@@ -711,6 +715,9 @@ const markOrderReadyForPickup = async (req, res, next) => {
     // Notify
     const notifyEvent = driver ? 'order_assigned' : 'order_status_update';
     await NotificationService.sendOrderNotification(order, notifyEvent);
+
+    // Notify Admin of Status Change
+    notifyOrderStatusChange(order, 'pending');
 
     res.json({
       success: true,
