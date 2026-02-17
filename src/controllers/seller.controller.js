@@ -397,10 +397,12 @@ const updateInventoryQuantity = async (req, res, next) => {
     }
 
     Object.keys(cylinders).forEach(size => {
+      if (!inventory.cylinders[size]) inventory.cylinders[size] = {}; // Ensure object exists
       if (cylinders[size].quantity !== undefined) inventory.cylinders[size].quantity = cylinders[size].quantity;
       if (cylinders[size].price !== undefined) inventory.cylinders[size].price = cylinders[size].price;
     });
 
+    inventory.markModified('cylinders'); // ✅ Required for Mixed type updates
     await inventory.save();
 
     res.json({
