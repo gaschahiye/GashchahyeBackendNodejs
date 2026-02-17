@@ -500,6 +500,27 @@ exports.assignDriverToOrder = async (req, res, next) => {
   }
 };
 
+/**
+ * Update inventory by warehouse ID
+ * @route PATCH /api/admin/inventory/:warehouseId
+ */
+exports.updateInventory = async (req, res, next) => {
+  try {
+    const { warehouseId } = req.params;
+    const updates = req.body;
+
+    const inventory = await AdminService.updateInventoryByWarehouseId(warehouseId, updates);
+
+    res.json({
+      success: true,
+      message: 'Inventory updated successfully',
+      inventory
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Aliases for backward compatibility
 exports.getAllDrivers = exports.getDriversList;
 exports.getAllOrders = exports.getOrdersOverview;

@@ -617,6 +617,51 @@ router.get('/drivers', adminController.getAllDrivers);
  */
 router.get('/orders', adminController.getAllOrders);
 
+/**
+ * @swagger
+ * /admin/inventory/{warehouseId}:
+ *   patch:
+ *     summary: Update inventory stock for a specific warehouse
+ *     description: Update cylinder quantities only. Prices and active status are ignored.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: warehouseId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The Warehouse ID (Location ID)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               cylinders:
+ *                 type: object
+ *                 description: Object with cylinder sizes as keys (e.g. '15kg', '11.8kg'). Only quantity is updated.
+ *                 example:
+ *                   "11.8kg": { "quantity": 10 }
+ *                   "15kg": { "quantity": 5 }
+ *     responses:
+ *       200:
+ *         description: Inventory updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 inventory: { type: object }
+ *       404:
+ *         description: Inventory not found for this warehouse
+ */
+router.patch('/inventory/:warehouseId', adminController.updateInventory);
+
 // ... export router
 
 

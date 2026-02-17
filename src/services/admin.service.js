@@ -430,6 +430,35 @@ class AdminService {
         await NotificationService.sendOrderNotification(order, 'order_assigned');
         return order;
     }
+    /**
+     * Update inventory by warehouse ID (Location ID)
+     * Limit to only updating cylinder quantities (stock adjustment)
+     */
+    async updateInventoryByWarehouseId(warehouseId, updates) {
+        // Find inventory by location (warehouse) ID
+        const inventory = await Inventory.findOne({ locationid: warehouseId });
+
+        if (!inventory) {
+            throw new Error('Inventory not found for this warehouse');
+        }
+
+        // Only update cylinder quantities
+        if (updates.cylinders) {
+            Object.keys(updates.cylinders).forEach(size => {
+                if (!inventory.cylinders[size]) {
+                    inventory.cylinders[size] = {};
+                }
+                // Only allow updating quantity, ignore price/security updates
+                if (updates.cylinders[size].quantity !== undefined) {
+                    inventory.cylinders[size].quantity = updates.cylinders[size].quantity;
+                }
+            });
+            inventory.markModified('cylinders');
+        }
+
+        await inventory.save();
+        return inventory;
+    }
 }
 
 module.exports = new AdminService();
