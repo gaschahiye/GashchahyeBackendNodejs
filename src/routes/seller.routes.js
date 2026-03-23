@@ -635,6 +635,12 @@ router.post('/inventory', validate(sellerValidators.addUpdateInventory), sellerC
  *           schema:
  *             type: object
  *             properties:
+ *               pricePerKg:
+ *                 type: number
+ *                 description: Optional. New price per kg (updates city-wide).
+ *               isActive:
+ *                 type: boolean
+ *                 description: Optional. Set warehouse active/inactive.
  *               cylinders:
  *                 type: object
  *                 additionalProperties:

@@ -621,8 +621,8 @@ router.get('/orders', adminController.getAllOrders);
  * @swagger
  * /admin/inventory/{warehouseId}:
  *   patch:
- *     summary: Update inventory stock for a specific warehouse
- *     description: Update cylinder quantities only. Prices and active status are ignored.
+ *     summary: Update inventory details for a specific warehouse
+ *     description: Update cylinder quantities, prices, price per kg, or active status. Updating pricePerKg will propagate city-wide for the seller.
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
@@ -640,11 +640,17 @@ router.get('/orders', adminController.getAllOrders);
  *           schema:
  *             type: object
  *             properties:
+ *               pricePerKg:
+ *                 type: number
+ *                 description: Optional. New price per kg (updates city-wide).
+ *               isActive:
+ *                 type: boolean
+ *                 description: Optional. Set warehouse active/inactive.
  *               cylinders:
  *                 type: object
- *                 description: Object with cylinder sizes as keys (e.g. '15kg', '11.8kg'). Value is an object with 'quantity'.
+ *                 description: Optional. Object with cylinder sizes as keys. Only provided fields (quantity, price) will be updated.
  *                 example:
- *                   "11.8kg": { "quantity": 10 }
+ *                   "11.8kg": { "quantity": 10, "price": 2500 }
  *                   "15kg": { "quantity": 5 }
  *     responses:
  *       200:

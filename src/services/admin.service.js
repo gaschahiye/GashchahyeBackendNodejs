@@ -432,7 +432,7 @@ class AdminService {
     }
     /**
      * Update inventory by warehouse ID (Location ID)
-     * Limit to only updating cylinder quantities (stock adjustment)
+     * Allows optional updates for price, pricePerKg, isActive, and cylinder quantities.
      */
     async updateInventoryByWarehouseId(warehouseId, updates) {
         // Find inventory by location (warehouse) ID
@@ -442,21 +442,46 @@ class AdminService {
             throw new Error('Inventory not found for this warehouse');
         }
 
-        // Only update cylinder quantities
+        const oldPricePerKg = inventory.pricePerKg;
+        const newPricePerKg = updates.pricePerKg;
+
+        // Update top-level fields if provided
+        if (updates.pricePerKg !== undefined) inventory.pricePerKg = updates.pricePerKg;
+        if (typeof updates.isActive === 'boolean') inventory.isActive = updates.isActive;
+
+        // Update cylinders if provided
         if (updates.cylinders) {
             Object.keys(updates.cylinders).forEach(size => {
                 if (!inventory.cylinders[size]) {
                     inventory.cylinders[size] = {};
                 }
-                // Only allow updating quantity, ignore price/security updates
+                // Update quantity if provided
                 if (updates.cylinders[size].quantity !== undefined) {
                     inventory.cylinders[size].quantity = updates.cylinders[size].quantity;
+                }
+                // Update price if provided
+                if (updates.cylinders[size].price !== undefined) {
+                    inventory.cylinders[size].price = updates.cylinders[size].price;
                 }
             });
             inventory.markModified('cylinders');
         }
 
         await inventory.save();
+
+        // City-wide price update logic (if pricePerKg changed)
+        if (newPricePerKg !== undefined && oldPricePerKg !== newPricePerKg) {
+            await Inventory.updateMany(
+                {
+                    seller: inventory.seller,
+                    city: inventory.city,
+                    _id: { $ne: inventory._id }
+                },
+                {
+                    $set: { pricePerKg: newPricePerKg }
+                }
+            );
+        }
         return inventory;
     }
 }

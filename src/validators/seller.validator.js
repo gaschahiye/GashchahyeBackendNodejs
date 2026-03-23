@@ -63,6 +63,8 @@ exports.addUpdateInventory = Joi.object({
 });
 
 exports.updateInventory = Joi.object({
+  pricePerKg: Joi.number().min(0).optional(),
+  isActive: Joi.boolean().optional(),
   cylinders: Joi.object({
     '15kg': Joi.object({
       quantity: Joi.number().min(0).optional(),

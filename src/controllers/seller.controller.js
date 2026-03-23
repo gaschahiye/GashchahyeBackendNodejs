@@ -385,7 +385,7 @@ const updateCityPrice = async (req, res, next) => {
 const updateInventoryQuantity = async (req, res, next) => {
   try {
     const { inventoryId } = req.params;
-    const { cylinders } = req.body;
+    const { cylinders, pricePerKg, isActive } = req.body;
 
     const inventory = await Inventory.findOne({
       _id: inventoryId,
@@ -396,14 +396,37 @@ const updateInventoryQuantity = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Inventory not found' });
     }
 
-    Object.keys(cylinders).forEach(size => {
-      if (!inventory.cylinders[size]) inventory.cylinders[size] = {}; // Ensure object exists
-      if (cylinders[size].quantity !== undefined) inventory.cylinders[size].quantity = cylinders[size].quantity;
-      if (cylinders[size].price !== undefined) inventory.cylinders[size].price = cylinders[size].price;
-    });
+    const oldPricePerKg = inventory.pricePerKg;
+    const newPricePerKg = pricePerKg;
 
-    inventory.markModified('cylinders'); // ✅ Required for Mixed type updates
+    // Update top-level fields if provided
+    if (pricePerKg !== undefined) inventory.pricePerKg = pricePerKg;
+    if (typeof isActive === 'boolean') inventory.isActive = isActive;
+
+    if (cylinders) {
+      Object.keys(cylinders).forEach(size => {
+        if (!inventory.cylinders[size]) inventory.cylinders[size] = {}; // Ensure object exists
+        if (cylinders[size].quantity !== undefined) inventory.cylinders[size].quantity = cylinders[size].quantity;
+        if (cylinders[size].price !== undefined) inventory.cylinders[size].price = cylinders[size].price;
+      });
+      inventory.markModified('cylinders'); // ✅ Required for Mixed type updates
+    }
+
     await inventory.save();
+
+    // City-wide price update logic (if pricePerKg changed)
+    if (newPricePerKg !== undefined && oldPricePerKg !== newPricePerKg) {
+        await Inventory.updateMany(
+            {
+                seller: inventory.seller,
+                city: inventory.city,
+                _id: { $ne: inventory._id }
+            },
+            {
+                $set: { pricePerKg: newPricePerKg }
+            }
+        );
+    }
 
     res.json({
       success: true,
