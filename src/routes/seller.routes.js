@@ -650,6 +650,29 @@ router.post('/inventory', validate(sellerValidators.addUpdateInventory), sellerC
  *                       type: number
  *                     price:
  *                       type: number
+ *               addOns:
+ *                 type: array
+ *                 description: Optional. Array of add-on items.
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     title:
+ *                       type: string
+ *                     price:
+ *                       type: number
+ *                     quantity:
+ *                       type: number
+ *                     discount:
+ *                       type: number
+ *                     description:
+ *                       type: string
+ *                 additionalProperties:
+ *                   type: object
+ *                   properties:
+ *                     quantity:
+ *                       type: number
+ *                     price:
+ *                       type: number
  *     responses:
  *       200:
  *         description: Inventory updated successfully

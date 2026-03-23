@@ -448,6 +448,7 @@ class AdminService {
         // Update top-level fields if provided
         if (updates.pricePerKg !== undefined) inventory.pricePerKg = updates.pricePerKg;
         if (typeof updates.isActive === 'boolean') inventory.isActive = updates.isActive;
+        if (updates.addOns !== undefined) inventory.addOns = updates.addOns;
 
         // Update cylinders if provided
         if (updates.cylinders) {

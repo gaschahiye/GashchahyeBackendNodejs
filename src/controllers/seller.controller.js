@@ -385,7 +385,7 @@ const updateCityPrice = async (req, res, next) => {
 const updateInventoryQuantity = async (req, res, next) => {
   try {
     const { inventoryId } = req.params;
-    const { cylinders, pricePerKg, isActive } = req.body;
+    const { cylinders, pricePerKg, isActive, addOns } = req.body;
 
     const inventory = await Inventory.findOne({
       _id: inventoryId,
@@ -402,6 +402,7 @@ const updateInventoryQuantity = async (req, res, next) => {
     // Update top-level fields if provided
     if (pricePerKg !== undefined) inventory.pricePerKg = pricePerKg;
     if (typeof isActive === 'boolean') inventory.isActive = isActive;
+    if (addOns !== undefined) inventory.addOns = addOns;
 
     if (cylinders) {
       Object.keys(cylinders).forEach(size => {

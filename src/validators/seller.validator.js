@@ -82,7 +82,16 @@ exports.updateInventory = Joi.object({
       quantity: Joi.number().min(0).optional(),
       price: Joi.number().min(0).optional()
     }).optional()
-  }).optional()
+  }).optional(),
+  addOns: Joi.array().items(
+    Joi.object({
+      title: Joi.string().min(2).max(100).required(),
+      price: Joi.number().min(0).required(),
+      description: Joi.string().max(500).optional(),
+      discount: Joi.number().min(0).max(100).default(0),
+      quantity: Joi.number().min(0).required()
+    })
+  ).optional()
 });
 
 exports.markReady = Joi.object({

@@ -646,6 +646,18 @@ router.get('/orders', adminController.getAllOrders);
  *               isActive:
  *                 type: boolean
  *                 description: Optional. Set warehouse active/inactive.
+ *               addOns:
+ *                 type: array
+ *                 description: Optional. Array of add-on items.
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     title:
+ *                       type: string
+ *                     price:
+ *                       type: number
+ *                     quantity:
+ *                       type: number
  *               cylinders:
  *                 type: object
  *                 description: Optional. Object with cylinder sizes as keys. Only provided fields (quantity, price) will be updated.
