@@ -300,7 +300,7 @@ class AdminService {
 
         const [drivers, total] = await Promise.all([
             User.find(query)
-                .select('fullName phoneNumber vehicleNumber zone driverStatus isActive autoAssignOrders createdAt')
+                .select('fullName email cnic phoneNumber vehicleNumber zone driverStatus isActive autoAssignOrders createdAt')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(parseInt(limit)),

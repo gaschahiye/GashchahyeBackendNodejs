@@ -408,6 +408,8 @@ router.post('/drivers/add', adminController.addNewDriver);
  *                             type: string
  *                           phoneNumber:
  *                             type: string
+ *                           email:
+ *                             type: string
  *                           vehicleNumber:
  *                             type: string
  *                           zone:
