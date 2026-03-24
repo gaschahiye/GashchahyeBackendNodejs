@@ -189,6 +189,19 @@ const createOrder = async (req, res, next) => {
       });
     }
 
+    // Check Driver Availability for completely new orders
+    if (orderType === 'new') {
+      const availableDriver = await findDriverInZone(deliveryLocation.location, session);
+      if (!availableDriver) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          success: false,
+          message: 'No drivers are currently available in your area. Please try again later.'
+        });
+      }
+    }
+
     // Fetch inventory for specific warehouse (with session)
     const inventory = await Inventory.findOne({
       seller,
