@@ -230,6 +230,7 @@ exports.createDriver = async (req, res, next) => {
       zone,
       autoAssignOrders = false,
       cnic,
+      email,
       licenseNumber
     } = req.body;
 
@@ -246,6 +247,7 @@ exports.createDriver = async (req, res, next) => {
       zone,
       autoAssignOrders,
       cnic,
+      email,
       licenseNumber
     });
 

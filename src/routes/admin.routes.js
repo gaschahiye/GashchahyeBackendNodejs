@@ -283,8 +283,12 @@ router.patch('/sellers/:sellerId/status', adminController.updateSellerStatus);
  *                 example: "driverPass123"
  *               phoneNumber:
  *                 type: string
- *                 description: Valid Pakistani phone number
- *                 example: "+923001234567"
+ *                 description: Driver's contact number (must be pakistani format starting with 0 or +92)
+ *                 example: "03001234567"
+ *               email:
+ *                 type: string
+ *                 description: Driver's email address
+ *                 example: "driver@example.com"
  *               vehicleNumber:
  *                 type: string
  *                 example: "LEC-1234"

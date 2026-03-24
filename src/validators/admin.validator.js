@@ -13,6 +13,7 @@ exports.updateSellerStatus = Joi.object({
 exports.createDriver = Joi.object({
   fullName: Joi.string().min(2).max(100).required(),
   phoneNumber: Joi.string().pattern(/^(\+92|0)?3[0-9]{9}$/).required(),
+  email: Joi.string().email().optional(),
   password: Joi.string().min(6).required(),
   vehicleNumber: Joi.string().required(),
   zone: Joi.string().required(),
