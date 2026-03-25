@@ -602,11 +602,15 @@ const getOrders = async (req, res, next) => {
     const { status, page = 1, limit = 20 } = req.query;
     const query = { buyer: req.user._id };
 
+    console.log(`📦 BUYER getOrders called. Raw status: "${status}" (type: ${typeof status})`);
+    console.log(`   Full query params:`, req.query);
+
     // --------------------------------------------------
     // NEW FILTER LOGIC (Broadened for Buyer UX)
     // --------------------------------------------------
     if (status) {
       const normalizedStatus = status.trim().toLowerCase();
+      console.log(`   Normalized status: "${normalizedStatus}"`);
 
       if (normalizedStatus === 'pending') {
         // Broadened "pending" to include everything before "in transit"
@@ -621,6 +625,7 @@ const getOrders = async (req, res, next) => {
             'pickup_ready'
           ] 
         };
+        console.log('   ✅ Matched: pending (broadened)');
       } else if (normalizedStatus === 'inprocess') {
         // "inprocess" now covers actively moving orders
         query.status = {
@@ -633,13 +638,26 @@ const getOrders = async (req, res, next) => {
             'return_pickup'
           ]
         };
+        console.log('   ✅ Matched: inprocess');
       } else if (normalizedStatus === 'completed') {
         query.status = { $in: ['completed', 'delivered', 'returned'] };
+        console.log('   ✅ Matched: completed');
+      } else if (normalizedStatus.includes(',')) {
+        // Safety net: handle comma-separated statuses from Flutter
+        // e.g. "pending,refill_requested,return_requested"
+        const statusArray = normalizedStatus.split(',').map(s => s.trim()).filter(Boolean);
+        query.status = { $in: statusArray };
+        console.log(`   ✅ Matched: comma-separated -> ${JSON.stringify(statusArray)}`);
       } else {
         // exact match for any other status string (e.g. 'cancelled')
         query.status = normalizedStatus;
+        console.log(`   ⚠️ No match, using exact: "${normalizedStatus}"`);
       }
+    } else {
+      console.log('   ⚠️ No status param sent — returning ALL orders');
     }
+
+    console.log(`   Final MongoDB query:`, JSON.stringify(query));
     // --------------------------------------------------
 
     const skip = (page - 1) * limit;
