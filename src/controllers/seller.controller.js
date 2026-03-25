@@ -563,24 +563,42 @@ const approveRefill = async (req, res, next) => {
       });
     }
 
-    const inventory = await Inventory.findOne({ locationid: warehouseId, seller: sellerId });
+    // Try finding inventory by locationid first, then fall back to matching by Inventory's own _id
+    let inventory = await Inventory.findOne({ locationid: warehouseId, seller: sellerId });
     if (!inventory) {
-      console.log('❌ DEBUG: Warehouse inventory not found');
+      console.log('⚠️ DEBUG: No inventory found by locationid, trying by Inventory _id...');
+      inventory = await Inventory.findOne({ _id: warehouseId, seller: sellerId });
+    }
+    if (!inventory) {
+      console.log('❌ DEBUG: Warehouse inventory not found by locationid or _id');
+      console.log(`   Searched for warehouseId: ${warehouseId}, sellerId: ${sellerId}`);
       return res.status(404).json({
         success: false,
         message: 'Warehouse not found for this seller'
       });
     }
 
+    console.log(`   ✅ Inventory found: ${inventory._id}, locationid: ${inventory.locationid}`);
+    console.log(`   Inventory cylinders keys: ${JSON.stringify(Object.keys(inventory.cylinders || {}))}`);
+    console.log(`   Inventory cylinders data: ${JSON.stringify(inventory.cylinders)}`);
+    console.log(`   Order cylinderSize: "${order.cylinderSize}" (type: ${typeof order.cylinderSize})`);
+
     // Check inventory stock
-    const availableQty = inventory.cylinders[order.cylinderSize]?.quantity || 0;
-    console.log(`   Inventory Check: Size ${order.cylinderSize}, Available: ${availableQty}, Required: ${order.quantity}`);
+    const availableQty = inventory.cylinders?.[order.cylinderSize]?.quantity || 0;
+    console.log(`   Inventory Check: Size "${order.cylinderSize}", Available: ${availableQty}, Required: ${order.quantity}`);
+
+    // Also log total inventory across all sizes for comparison
+    const totalAllSizes = Object.entries(inventory.cylinders || {}).reduce((sum, [size, data]) => {
+      console.log(`     -> Size "${size}": quantity=${data?.quantity || 0}`);
+      return sum + (data?.quantity || 0);
+    }, 0);
+    console.log(`   Total inventory across all sizes: ${totalAllSizes}`);
 
     if (availableQty < order.quantity) {
-      console.log('❌ DEBUG: Insufficient stock');
+      console.log(`❌ DEBUG: Insufficient stock for size "${order.cylinderSize}". Available: ${availableQty}, Required: ${order.quantity}`);
       return res.status(400).json({
         success: false,
-        message: 'Not enough filled cylinders available in this warehouse'
+        message: `Not enough filled cylinders available in this warehouse. Size: ${order.cylinderSize}, Available: ${availableQty}, Required: ${order.quantity}`
       });
     }
 
