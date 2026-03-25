@@ -603,20 +603,41 @@ const getOrders = async (req, res, next) => {
     const query = { buyer: req.user._id };
 
     // --------------------------------------------------
-    // NEW FILTER LOGIC
+    // NEW FILTER LOGIC (Broadened for Buyer UX)
     // --------------------------------------------------
     if (status) {
-      if (status === 'pending') {
-        // buyer has just requested – seller hasn’t acted yet
-        query.status = { $in: ['pending', 'refill_requested', 'return_requested'] };
-      } else if (status === 'inprocess') {
-        // everything that is neither “new” nor finished
-        query.status = {
-          $nin: ['pending', 'refill_requested', 'return_requested', 'completed', 'cancelled']
+      const normalizedStatus = status.trim().toLowerCase();
+
+      if (normalizedStatus === 'pending') {
+        // Broadened "pending" to include everything before "in transit"
+        query.status = { 
+          $in: [
+            'pending', 
+            'refill_requested', 
+            'return_requested', 
+            'accepted', 
+            'assigned', 
+            'qrgenerated', 
+            'pickup_ready'
+          ] 
         };
+      } else if (normalizedStatus === 'inprocess') {
+        // "inprocess" now covers actively moving orders
+        query.status = {
+          $in: [
+            'in_transit', 
+            'refill_pickup', 
+            'refill_accepted', 
+            'refill_in_store', 
+            'refill_ready', 
+            'return_pickup'
+          ]
+        };
+      } else if (normalizedStatus === 'completed') {
+        query.status = { $in: ['completed', 'delivered', 'returned'] };
       } else {
-        // exact match for any other status string
-        query.status = status;
+        // exact match for any other status string (e.g. 'cancelled')
+        query.status = normalizedStatus;
       }
     }
     // --------------------------------------------------
