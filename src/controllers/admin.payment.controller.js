@@ -1064,6 +1064,26 @@ const syncGoogleSheetWebhook = async (req, res, next) => {
     }
 };
 
+/**
+ * Get Google Sheet URL
+ * @route GET /api/admin/payments/sheet-url
+ */
+const getGoogleSheetUrl = (req, res) => {
+    const sheetId = process.env.GOOGLE_SHEET_ID;
+    if (!sheetId) {
+        return res.status(404).json({
+            success: false,
+            message: 'Google Sheet ID not configured in environment'
+        });
+    }
+
+    const url = `https://docs.google.com/spreadsheets/d/${sheetId}`;
+    return res.status(200).json({
+        success: true,
+        url
+    });
+};
+
 // --- EXPORTS ---
 exports.getPaymentTimeline = getPaymentTimeline;
 exports.clearPayment = clearPayment;
@@ -1074,3 +1094,4 @@ exports.syncGoogleSheetInternal = syncGoogleSheetInternal;
 exports.rebuildSheet = rebuildSheet;
 exports.syncGoogleSheetWebhook = syncGoogleSheetWebhook;
 exports.rebuildSheetLogic = rebuildSheetLogic;
+exports.getGoogleSheetUrl = getGoogleSheetUrl;

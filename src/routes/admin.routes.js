@@ -932,5 +932,26 @@ router.post('/payments/sync', adminPaymentController.syncGoogleSheet);
  */
 router.post('/payments/sync-webhook', adminPaymentController.syncGoogleSheetWebhook);
 
+/**
+ * @swagger
+ * /admin/payments/sheet-url:
+ *   get:
+ *     summary: Get the direct Google Sheet URL
+ *     description: Returns the URL of the Google Sheet connected to the backend.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 url: { type: string }
+ */
+router.get('/payments/sheet-url', adminPaymentController.getGoogleSheetUrl);
 
 module.exports = router;

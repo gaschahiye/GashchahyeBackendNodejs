@@ -65,8 +65,16 @@ class GoogleSheetService {
 
     async addPaymentRow(data) {
         try {
+            const isFee = ['delivery_fee', 'pickup_fee'].includes(data.type);
             const isCompleted = data.status?.toLowerCase() === 'completed';
-            const sheetTitle = isCompleted ? 'Completed History' : 'Live Ledger';
+            
+            let sheetTitle;
+            if (isFee) {
+                sheetTitle = 'Company Fees';
+            } else {
+                sheetTitle = isCompleted ? 'Completed History' : 'Live Ledger';
+            }
+
             const sheet = await this.getSheetByTitle(sheetTitle);
             if (!sheet) return;
 
@@ -179,8 +187,12 @@ class GoogleSheetService {
             if (!this.doc) await this.initialize();
             if (!this.doc) return;
 
-            const pendingPayments = payments.filter(p => p.status?.toLowerCase() === 'pending');
-            const completedPayments = payments.filter(p => p.status?.toLowerCase() === 'completed');
+            const feeTypes = ['delivery_fee', 'pickup_fee'];
+            const refundTypes = ['refund', 'partial_refund'];
+
+            const feePayments = payments.filter(p => feeTypes.includes(p.type));
+            const pendingPayments = payments.filter(p => !feeTypes.includes(p.type) && p.status?.toLowerCase() === 'pending');
+            const completedPayments = payments.filter(p => !feeTypes.includes(p.type) && p.status?.toLowerCase() === 'completed');
 
             // --- 1. SETUP LIVE LEDGER ---
             const liveSheet = await this.getSheetByTitle('Live Ledger');
@@ -192,7 +204,12 @@ class GoogleSheetService {
             await historySheet.clear();
             await this._setupProfessionalHeader(historySheet, 'GasChahye Completed History', completedPayments);
 
-            console.log(`[Sheet] Rebuilt both tabs with ${pendingPayments.length} pending and ${completedPayments.length} completed entries.`);
+            // --- 3. SETUP COMPANY FEES ---
+            const feeSheet = await this.getSheetByTitle('Company Fees');
+            await feeSheet.clear();
+            await this._setupProfessionalHeader(feeSheet, 'GasChahye Company Fees', feePayments);
+
+            console.log(`[Sheet] Rebuilt 3 tabs: ${pendingPayments.length} pending, ${completedPayments.length} completed, and ${feePayments.length} fees.`);
         } catch (error) {
             console.error('Failed to sync all to Google Sheet:', error.message);
         }
