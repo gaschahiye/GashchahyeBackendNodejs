@@ -192,7 +192,9 @@ const getPaymentTimeline = async (req, res, next) => {
         // Facet for Stats and Data
         pipeline.push({
             $facet: {
-                data: [], // No skip/limit = all data
+                data: [
+                    { $match: { paymentType: { $nin: ['delivery_fee', 'pickup_fee'] } } }
+                ],
                 stats: [
                     {
                         $group: {
@@ -328,7 +330,7 @@ const clearPayment = async (req, res, next) => {
         }
 
         timelineEntry.status = 'completed';
-        timelineEntry.processedBy = req.user.fullName; // Assuming Auth Middleware populates user
+        timelineEntry.processedBy = req.user._id; // Use ObjectId instead of fullName to avoid CastError
         timelineEntry.processedAt = new Date();
         if (referenceId) timelineEntry.referenceId = referenceId;
         if (notes) timelineEntry.cause = notes; // Append or unused cause/notes field
@@ -488,10 +490,13 @@ const exportPayments = async (req, res, next) => {
 
         const payments = await Order.aggregate(pipeline);
 
-        // Separate Ledger vs Refunds
+        // Separate Ledger vs Refunds vs Company Revenues (Fees)
         const refundTypes = ['refund', 'partial_refund'];
-        const ledgerPayments = payments.filter(p => !refundTypes.includes(p.type));
+        const feeTypes = ['delivery_fee', 'pickup_fee'];
+        
+        const feePaymentsOnly = payments.filter(p => feeTypes.includes(p.type));
         const refundPaymentsOnly = payments.filter(p => refundTypes.includes(p.type));
+        const ledgerPayments = payments.filter(p => !refundTypes.includes(p.type) && !feeTypes.includes(p.type));
 
         const workbook = new exceljs.Workbook();
 
@@ -618,7 +623,17 @@ const exportPayments = async (req, res, next) => {
         refundRow += 2;
         refundRow = createTable(wsRefunds, refundRow, 'COMPLETED REFUNDS', completedRefunds, 'FF16A34A');
 
-        // --- 3. Protection ---
+        // --- 3. Fees / Company Revenue Sheet ---
+        const wsFees = workbook.addWorksheet('Company Fees');
+        addSheetHeader(wsFees, 'GasChahye Company Fees');
+        const pendingFees = feePaymentsOnly.filter(p => p.status?.toLowerCase() === 'pending');
+        const completedFees = feePaymentsOnly.filter(p => p.status?.toLowerCase() === 'completed');
+        let feeRow = 7;
+        feeRow = createTable(wsFees, feeRow, 'PENDING FEES', pendingFees, 'FFEA580C');
+        feeRow += 2;
+        feeRow = createTable(wsFees, feeRow, 'COMPLETED FEES', completedFees, 'FF0F172A');
+
+        // --- 4. Protection ---
         const protectSheet = async (ws, lastRow) => {
             await ws.protect('GasChahyeSecret', {
                 selectLockedCells: true,
@@ -639,6 +654,7 @@ const exportPayments = async (req, res, next) => {
         };
         await protectSheet(wsLedger, nextRow);
         await protectSheet(wsRefunds, refundRow);
+        await protectSheet(wsFees, feeRow);
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename=GasChahye_Ledger.xlsx');

@@ -749,7 +749,7 @@ const markOrderReadyForPickup = async (req, res, next) => {
       cause: 'Delivery Charge',
       amount: order.pricing.deliveryCharges || 0,
       liabilityType: 'revenue',
-      status: 'pending',
+      status: 'completed',
       driverId: driver ? driver._id : null,
       createdAt: new Date()
     });
