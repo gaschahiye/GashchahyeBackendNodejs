@@ -107,8 +107,21 @@ const getNearbySellers = async (req, res, next) => {
           inv => inv.locationid?.toString() === location._id.toString()
         );
 
-        // ✅ Skip if no inventory
-        if (!inventory) return;
+        // ✅ Skip if no inventory or total quantity is zero
+        if (!inventory || (inventory.totalInventory || 0) <= 0) return;
+
+        // ✅ Filter cylinders - only show sizes that have quantity > 0
+        const availableCylinders = {};
+        if (inventory.cylinders) {
+          Object.entries(inventory.cylinders).forEach(([size, data]) => {
+            if (data && (data.quantity || 0) > 0) {
+              availableCylinders[size] = data;
+            }
+          });
+        }
+
+        // Final sanity check - if after filtering no sizes are left, skip this location
+        if (Object.keys(availableCylinders).length === 0) return;
 
         formattedList.push({
           // Seller Info
@@ -126,7 +139,7 @@ const getNearbySellers = async (req, res, next) => {
           // Inventory Info
           inventoryId: inventory._id,
           pricePerKg: inventory.pricePerKg,
-          cylinders: inventory.cylinders,
+          cylinders: availableCylinders,
           addOns: inventory.addOns,
           lastUpdated: inventory.updatedAt
         });
