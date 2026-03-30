@@ -978,9 +978,11 @@ async function syncOrderTimelineToSheet(order, sellerInfo, buyerInfo) {
       const isDeliveryFee = entry.type === 'delivery_fee';
 
       let shouldPush = false;
-      if (!isSecurityDeposit && !isDeliveryFee) {
+      if (!isDeliveryFee) {
+        // Now including Gas/Addons AND Security Deposits for all orders
         shouldPush = true;
-      } else if (isReturn && (isSecurityDeposit || isDeliveryFee)) {
+      } else if (isReturn && isDeliveryFee) {
+        // delivery_fee only for returns (company revenue collection)
         shouldPush = true;
       }
 

@@ -43,29 +43,19 @@ const getSellerPaymentTimeline = async (req, res, next) => {
             }
         });
 
-        // ✅ FILTER: Conditional Display for Security & Delivery
-        // "Don't show Security Deposits and delivery fee until the order type is return"
+        // ✅ FILTER: Conditional Display for Delivery (Security Deposits now always shown)
+        // "Don't show delivery fee until the order type is return"
         pipeline.push({
             $match: {
                 $expr: {
                     $or: [
-                        // Show if it's NOT Security or Delivery
+                        // Show if it's NOT a delivery_fee
+                        { $ne: ['$paymentTimeline.type', 'delivery_fee'] },
+                        // OR Show if it IS a delivery_fee BUT Order Type is 'return'
                         {
                             $and: [
-                                { $ne: ['$paymentTimeline.cause', 'Security Deposits'] },
-                                { $ne: ['$paymentTimeline.type', 'delivery_fee'] }
-                            ]
-                        },
-                        // OR Show if it IS Security/Delivery BUT Order Type is 'return'
-                        {
-                            $and: [
-                                { $in: ['$orderType', ['return']] },
-                                {
-                                    $or: [
-                                        { $eq: ['$paymentTimeline.cause', 'Security Deposits'] },
-                                        { $eq: ['$paymentTimeline.type', 'delivery_fee'] }
-                                    ]
-                                }
+                                { $eq: ['$orderType', 'return'] },
+                                { $eq: ['$paymentTimeline.type', 'delivery_fee'] }
                             ]
                         }
                     ]

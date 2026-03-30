@@ -932,12 +932,15 @@ const rebuildSheetLogic = async () => {
     pipeline.push({ $match: { 'paymentTimeline.status': { $in: ['pending', 'completed'] } } });
     pipeline.push({ $match: { 'paymentTimeline.timelineId': { $exists: true, $ne: null, $ne: '' } } });
 
+    // ✅ Updated Filter: Now always show Security Deposits, only hide delivery_fee unless it's a return
     pipeline.push({
         $match: {
             $expr: {
                 $or: [
-                    { $and: [{ $ne: ['$paymentTimeline.cause', 'Security Deposits'] }, { $ne: ['$paymentTimeline.type', 'delivery_fee'] }] },
-                    { $and: [{ $in: ['$orderType', ['return']] }, { $or: [{ $eq: ['$paymentTimeline.cause', 'Security Deposits'] }, { $eq: ['$paymentTimeline.type', 'delivery_fee'] }] }] }
+                    // Show if it's NOT a delivery_fee
+                    { $ne: ['$paymentTimeline.type', 'delivery_fee'] },
+                    // OR Show if it IS a delivery_fee AND Order Type is 'return'
+                    { $and: [{ $eq: ['$paymentTimeline.type', 'delivery_fee'] }, { $eq: ['$orderType', 'return'] }] }
                 ]
             }
         }
