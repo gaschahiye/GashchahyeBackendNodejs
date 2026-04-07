@@ -220,11 +220,17 @@ const getPaymentTimeline = async (req, res, next) => {
                                     ]
                                 }
                             },
+                            collectedAmount: {
+                                $sum: { $cond: [{ $eq: ['$status', 'collected'] }, '$amount', 0] }
+                            },
                             clearedAmount: {
                                 $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$amount', 0] }
                             },
                             pendingCount: {
                                 $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
+                            },
+                            collectedCount: {
+                                $sum: { $cond: [{ $eq: ['$status', 'collected'] }, 1, 0] }
                             },
                             clearedCount: {
                                 $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
@@ -280,7 +286,9 @@ const getPaymentTimeline = async (req, res, next) => {
             amountToSellers: 0,
             amountToRefund: 0,
             clearedAmount: 0,
+            collectedAmount: 0,
             pendingCount: 0,
+            collectedCount: 0,
             clearedCount: 0,
             pendingSellerPayments: 0,
             pendingRefunds: 0,
@@ -296,6 +304,7 @@ const getPaymentTimeline = async (req, res, next) => {
                 ...statsObj,
                 statusDistribution: {
                     pending: statsObj.pendingCount,
+                    collected: statsObj.collectedCount,
                     completed: statsObj.clearedCount
                 },
                 refundAmount: statsObj.totalRefundAmount,
