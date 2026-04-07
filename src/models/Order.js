@@ -225,7 +225,7 @@ const orderSchema = new mongoose.Schema({
     amount: { type: Number, required: true },
     liabilityType: { type: String, enum: ['revenue', 'liability', 'refundable'], default: 'revenue' },
     paymentMethod: { type: String, enum: ['jazzcash', 'easypaisa', 'card', 'cod', 'wallet'], default: 'cod' },
-    status: { type: String, enum: ['pending', 'completed'], default: 'pending' },
+    status: { type: String, enum: ['pending', 'collected', 'completed'], default: 'pending' },
     referenceId: { type: String },
     processedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     processedAt: { type: Date },

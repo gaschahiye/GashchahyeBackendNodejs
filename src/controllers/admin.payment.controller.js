@@ -329,11 +329,25 @@ const clearPayment = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Payment is already cleared' });
         }
 
-        timelineEntry.status = 'completed';
-        timelineEntry.processedBy = req.user._id; // Use ObjectId instead of fullName to avoid CastError
+        let newStatus = 'completed';
+        let responseMessage = 'Payment cleared successfully';
+
+        // ✅ Handle two-stage refund process: pending -> collected -> completed
+        if (timelineEntry.type === 'refund') {
+            if (timelineEntry.status === 'pending') {
+                newStatus = 'collected';
+                responseMessage = 'Refund collected from seller';
+            } else if (timelineEntry.status === 'collected') {
+                newStatus = 'completed';
+                responseMessage = 'Refund paid to buyer';
+            }
+        }
+
+        timelineEntry.status = newStatus;
+        timelineEntry.processedBy = req.user._id; 
         timelineEntry.processedAt = new Date();
         if (referenceId) timelineEntry.referenceId = referenceId;
-        if (notes) timelineEntry.cause = notes; // Append or unused cause/notes field
+        if (notes) timelineEntry.cause = notes; 
 
         // If it was a 'delivery_fee', update driver earnings too
         if (timelineEntry.type === 'delivery_fee') {
@@ -349,7 +363,7 @@ const clearPayment = async (req, res, next) => {
 
         // ✅ Sync status to Google Sheet
         const GoogleSheetService = require('../services/googleSheet.service');
-        await GoogleSheetService.updateStatusInSheet(timelineId, 'completed', referenceId);
+        await GoogleSheetService.updateStatusInSheet(timelineId, newStatus, referenceId);
 
         // ✅ NEW: Send notification and socket event to seller
         try {
@@ -369,7 +383,7 @@ const clearPayment = async (req, res, next) => {
 
         res.json({
             success: true,
-            message: 'Payment cleared successfully',
+            message: responseMessage,
             payment: timelineEntry
         });
     } catch (error) {
@@ -386,7 +400,7 @@ const exportPayments = async (req, res, next) => {
         const pipeline = [{ $unwind: '$paymentTimeline' }];
 
         // Allow both pending and completed for the ledger view
-        pipeline.push({ $match: { 'paymentTimeline.status': { $in: ['pending', 'completed'] } } });
+        pipeline.push({ $match: { 'paymentTimeline.status': { $in: ['pending', 'collected', 'completed'] } } });
 
         // ✅ FILTER: Exclude payments without timelineId
         pipeline.push({

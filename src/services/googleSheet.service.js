@@ -2,7 +2,7 @@ const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 
 const LEDGER_HEADERS = ['Date', 'Order ID', 'Person', 'Person Type', 'Phone', 'Tx Type', 'Liability', 'Details', 'Amount', 'Status', 'Reference ID', 'System ID'];
-const STATUS_ENUMS = ['pending', 'completed'];
+const STATUS_ENUMS = ['pending', 'collected', 'completed'];
 const TYPE_ENUMS = ['pickup_fee', 'delivery_fee', 'refund', 'sale', 'other'];
 const LIABILITY_ENUMS = ['revenue', 'liability', 'refundable'];
 
