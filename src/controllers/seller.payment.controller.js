@@ -134,6 +134,15 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                     phone: '$buyerInfo.phoneNumber',
                                     personId: '$buyerInfo._id'
                                 }
+                            },
+                            {
+                                case: { $eq: ['$paymentTimeline.type', 'security_deposit'] },
+                                then: {
+                                    name: 'Platform/Admin',
+                                    type: 'admin',
+                                    phone: 'N/A',
+                                    personId: null
+                                }
                             }
                         ],
                         default: {
@@ -174,19 +183,19 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                 personName: { $ifNull: ['$resolvedPerson.name', 'N/A'] },
                 personType: '$resolvedPerson.type',
                 phone: { $ifNull: ['$resolvedPerson.phone', 'N/A'] },
-                paymentType: '$paymentTimeline.type',
+                paymentType: { $ifNull: ['$paymentTimeline.type', 'other'] },
                 amount: '$paymentTimeline.amount',
                 paymentMethod: '$paymentTimeline.paymentMethod',
                 status: '$paymentTimeline.status',
                 date: '$paymentTimeline.createdAt',
-                notes: '$paymentTimeline.cause',
+                settledDate: '$paymentTimeline.processedAt',
+                settledBy: '$paymentTimeline.processedBy',
+                notes: { $ifNull: ['$paymentTimeline.cause', ''] },
                 sellerId: { $toString: '$sellerInfo._id' },
                 buyerId: { $toString: '$buyerInfo._id' },
                 driverId: { $ifNull: [{ $toString: '$driver._id' }, null] },
                 liabilityType: '$paymentTimeline.liabilityType',
                 referenceId: '$paymentTimeline.referenceId',
-                processedBy: '$paymentTimeline.processedBy',
-                processedAt: '$paymentTimeline.processedAt',
                 originalPaymentMethod: '$payment.method'
             }
         });
@@ -232,6 +241,9 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                             },
                             clearedCount: {
                                 $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+                            },
+                            refundCount: {
+                                $sum: { $cond: [{ $in: ['$paymentType', ['refund', 'partial_refund']] }, 1, 0] }
                             }
                         }
                     }
@@ -248,7 +260,8 @@ const getSellerPaymentTimeline = async (req, res, next) => {
             amountToRefund: 0,
             clearedAmount: 0,
             pendingCount: 0,
-            clearedCount: 0
+            clearedCount: 0,
+            refundCount: 0
         };
 
         res.json({
@@ -256,6 +269,7 @@ const getSellerPaymentTimeline = async (req, res, next) => {
             data: data,
             summary: {
                 ...statsObj,
+                refundCount: statsObj.refundCount || 0,
                 statusDistribution: {
                     pending: statsObj.pendingCount,
                     completed: statsObj.clearedCount

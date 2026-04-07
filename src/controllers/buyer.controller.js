@@ -303,7 +303,7 @@ const createOrder = async (req, res, next) => {
         // 2. Security Charges (if any)
         ...(pricing.securityCharges > 0 ? [{
           timelineId: new mongoose.Types.ObjectId().toString(),
-          type: 'sale',
+          type: 'security_deposit',
           cause: 'Security Deposits',
           amount: pricing.securityCharges,
           liabilityType: 'refundable',
