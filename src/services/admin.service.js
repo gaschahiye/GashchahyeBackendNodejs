@@ -309,16 +309,29 @@ class AdminService {
 
         const driversWithStats = await Promise.all(
             drivers.map(async (driver) => {
-                const [assignedOrders, deliveredOrders] = await Promise.all([
+                const [totalOrders, deliveredOrdersCount, currentAssignedOrders] = await Promise.all([
                     Order.countDocuments({ driver: driver._id }),
-                    Order.countDocuments({ driver: driver._id, status: 'delivered' })
+                    Order.countDocuments({ 
+                        driver: driver._id, 
+                        status: { $in: ['delivered', 'completed', 'empty_return', 'returned'] } 
+                    }),
+                    Order.countDocuments({ 
+                        driver: driver._id, 
+                        status: { $in: ['assigned', 'accepted', 'qrgenerated', 'pickup_ready', 'in_transit', 'return_pickup'] } 
+                    })
                 ]);
+
+                const deliveryRate = totalOrders > 0 ? Math.round((deliveredOrdersCount / totalOrders) * 100) : 0;
 
                 return {
                     ...driver.toObject(),
                     stats: {
-                        assignedOrders,
-                        deliveredOrders
+                        totalOrders,
+                        deliveredOrders: deliveredOrdersCount,
+                        currentAssignedOrders,
+                        deliveryRate,
+                        averageRating: driver.rating?.average || 0,
+                        ratingCount: driver.rating?.count || 0
                     }
                 };
             })
