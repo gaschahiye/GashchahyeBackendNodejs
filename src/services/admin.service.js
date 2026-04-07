@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Order = require('../models/Order');
 const Location = require('../models/Location');
@@ -249,7 +250,7 @@ class AdminService {
             status: 'completed'
         });
         const totalRevenue = await Order.aggregate([
-            { $match: { seller: sellerId, 'payment.status': 'completed' } },
+            { $match: { seller: new mongoose.Types.ObjectId(sellerId), 'payment.status': 'completed' } },
             { $group: { _id: null, total: { $sum: '$pricing.grandTotal' } } }
         ]);
 
