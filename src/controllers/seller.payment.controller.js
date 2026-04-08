@@ -169,16 +169,6 @@ const getSellerPaymentTimeline = async (req, res, next) => {
             });
         }
 
-        if (status) {
-            if (status === 'completed' || status === 'cleared') {
-                // For a seller, a "collected" refund is effectively "cleared" from their balance
-                pipeline.push({ $match: { 'paymentTimeline.status': { $in: ['completed', 'collected'] } } });
-            } else {
-                pipeline.push({ $match: { 'paymentTimeline.status': status } });
-            }
-        }
-        if (type) pipeline.push({ $match: { 'paymentTimeline.type': type } });
-
         // Project Final Structure
         pipeline.push({
             $project: {
@@ -208,11 +198,22 @@ const getSellerPaymentTimeline = async (req, res, next) => {
 
         pipeline.push({ $sort: { date: -1 } });
 
+        // Prepare filters for the data facet (uses projected field names)
+        const detailFilters = {};
+        if (status) {
+            if (status === 'completed' || status === 'cleared') {
+                detailFilters['status'] = { $in: ['completed', 'collected'] };
+            } else {
+                detailFilters['status'] = status;
+            }
+        }
+        if (type) detailFilters['paymentType'] = type;
+
         // Facet for Stats and Data (no pagination - get all)
         pipeline.push({
             $facet: {
                 data: [
-                    { $match: {} } // Get all records
+                    { $match: detailFilters } 
                 ],
                 stats: [
                     {
@@ -223,7 +224,7 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                 $sum: { 
                                     $cond: [
                                         { $and: [{ $eq: ['$status', 'pending'] }, { $in: ['$paymentType', ['sale', 'seller_payment', 'security_deposit']] }] }, 
-                                        '$amount', 
+                                        { $toDouble: '$amount' }, 
                                         0
                                     ] 
                                 }
@@ -232,7 +233,7 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                 $sum: { 
                                     $cond: [
                                         { $and: [{ $eq: ['$status', 'completed'] }, { $in: ['$paymentType', ['sale', 'seller_payment', 'security_deposit']] }] }, 
-                                        '$amount', 
+                                        { $toDouble: '$amount' }, 
                                         0
                                     ] 
                                 }
@@ -242,7 +243,7 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                 $sum: { 
                                     $cond: [
                                         { $and: [{ $eq: ['$status', 'pending'] }, { $in: ['$paymentType', ['refund', 'partial_refund']] }] }, 
-                                        '$amount', 
+                                        { $toDouble: '$amount' }, 
                                         0
                                     ] 
                                 }
@@ -251,7 +252,7 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                 $sum: { 
                                     $cond: [
                                         { $and: [{ $eq: ['$status', 'collected'] }, { $in: ['$paymentType', ['refund', 'partial_refund']] }] }, 
-                                        '$amount', 
+                                        { $toDouble: '$amount' }, 
                                         0
                                     ] 
                                 }
@@ -260,7 +261,7 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                 $sum: { 
                                     $cond: [
                                         { $and: [{ $eq: ['$status', 'completed'] }, { $in: ['$paymentType', ['refund', 'partial_refund']] }] }, 
-                                        '$amount', 
+                                        { $toDouble: '$amount' }, 
                                         0
                                     ] 
                                 }
