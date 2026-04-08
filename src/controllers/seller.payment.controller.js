@@ -212,8 +212,8 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                     {
                         $group: {
                             _id: null,
-                            // Net Pending Calculation
-                            pendingEarnings: {
+                            // Income (Sales/Payments)
+                            pendingIncome: {
                                 $sum: { 
                                     $cond: [
                                         { $and: [{ $eq: ['$status', 'pending'] }, { $in: ['$paymentType', ['sale', 'seller_payment', 'security_deposit']] }] }, 
@@ -222,6 +222,16 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                     ] 
                                 }
                             },
+                            paidIncome: {
+                                $sum: { 
+                                    $cond: [
+                                        { $and: [{ $eq: ['$status', 'completed'] }, { $in: ['$paymentType', ['sale', 'seller_payment', 'security_deposit']] }] }, 
+                                        '$amount', 
+                                        0
+                                    ] 
+                                }
+                            },
+                            // Refunds (Deductions)
                             pendingRefunds: {
                                 $sum: { 
                                     $cond: [
@@ -231,17 +241,16 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                     ] 
                                 }
                             },
-                            // Net Cleared Calculation
-                            clearedEarnings: {
+                            collectedRefunds: {
                                 $sum: { 
                                     $cond: [
-                                        { $and: [{ $eq: ['$status', 'completed'] }, { $in: ['$paymentType', ['sale', 'seller_payment', 'security_deposit']] }] }, 
+                                        { $and: [{ $eq: ['$status', 'collected'] }, { $in: ['$paymentType', ['refund', 'partial_refund']] }] }, 
                                         '$amount', 
                                         0
                                     ] 
                                 }
                             },
-                            clearedRefunds: {
+                            completedRefunds: {
                                 $sum: { 
                                     $cond: [
                                         { $and: [{ $eq: ['$status', 'completed'] }, { $in: ['$paymentType', ['refund', 'partial_refund']] }] }, 
@@ -250,13 +259,17 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                     ] 
                                 }
                             },
+                            // Counts
                             pendingCount: {
                                 $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
                             },
-                            clearedCount: {
+                            collectedCount: {
+                                $sum: { $cond: [{ $eq: ['$status', 'collected'] }, 1, 0] }
+                            },
+                            completedCount: {
                                 $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
                             },
-                            refundCount: {
+                            totalRefundCount: {
                                 $sum: { $cond: [{ $in: ['$paymentType', ['refund', 'partial_refund']] }, 1, 0] }
                             }
                         }
@@ -264,15 +277,28 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                     {
                         $project: {
                             _id: 0,
-                            pendingEarnings: 1,
-                            pendingRefunds: 1,
-                            netPending: { $subtract: ['$pendingEarnings', '$pendingRefunds'] },
-                            clearedEarnings: 1,
-                            clearedRefunds: 1,
-                            netIncome: { $subtract: ['$clearedEarnings', '$clearedRefunds'] },
-                            pendingCount: 1,
-                            clearedCount: 1,
-                            refundCount: 1
+                            summary: {
+                                income: {
+                                    pending: '$pendingIncome',
+                                    paid: '$paidIncome'
+                                },
+                                refunds: {
+                                    pending: '$pendingRefunds',
+                                    collected: '$collectedRefunds',
+                                    completed: '$completedRefunds',
+                                    totalPaid: { $add: ['$collectedRefunds', '$completedRefunds'] }
+                                },
+                                net: {
+                                    pending: { $subtract: ['$pendingIncome', '$pendingRefunds'] },
+                                    cleared: { $subtract: ['$paidIncome', { $add: ['$collectedRefunds', '$completedRefunds'] }] }
+                                },
+                                statusDistribution: {
+                                    pending: '$pendingCount',
+                                    collected: '$collectedCount',
+                                    completed: '$completedCount'
+                                },
+                                totalRefunds: '$totalRefundCount'
+                            }
                         }
                     }
                 ]
@@ -282,31 +308,25 @@ const getSellerPaymentTimeline = async (req, res, next) => {
         const result = await Order.aggregate(pipeline);
 
         const data = result[0].data || [];
-        const statsObj = result[0].stats[0] || {
-            pendingEarnings: 0,
-            pendingRefunds: 0,
-            netPending: 0,
-            clearedEarnings: 0,
-            clearedRefunds: 0,
-            netIncome: 0,
-            pendingCount: 0,
-            clearedCount: 0,
-            refundCount: 0
+        const finalSummary = result[0].summary[0] || {
+            income: { pending: 0, paid: 0 },
+            refunds: { pending: 0, collected: 0, completed: 0, totalPaid: 0 },
+            net: { pending: 0, cleared: 0 },
+            statusDistribution: { pending: 0, collected: 0, completed: 0 },
+            totalRefunds: 0
         };
 
         res.json({
             success: true,
             data: data,
+            // Hierarchical structure for new apps
+            ...finalSummary,
+            // Legacy support for older apps
             summary: {
-                ...statsObj,
-                // Legacy support for older frontend versions
-                totalPending: statsObj.netPending,
-                clearedAmount: statsObj.netIncome,
-                
-                statusDistribution: {
-                    pending: statsObj.pendingCount,
-                    completed: statsObj.clearedCount
-                }
+                ...finalSummary,
+                totalPending: finalSummary.net.pending,
+                clearedAmount: finalSummary.net.cleared,
+                refundCount: finalSummary.totalRefunds
             },
             totalEntries: data.length
         });
