@@ -220,7 +220,7 @@ const orderSchema = new mongoose.Schema({
   /* ====== NEW: mini-ledger inside the same order row ====== */
   paymentTimeline: [{
     timelineId: { type: String, required: true },
-    type: { type: String, enum: ['pickup_fee', 'delivery_fee', 'refund', 'sale', 'other'], required: true },
+    type: { type: String, enum: ['pickup_fee', 'delivery_fee', 'refund', 'partial_refund', 'sale', 'seller_payment', 'security_deposit', 'other'], required: true },
     cause: { type: String },
     amount: { type: Number, required: true },
     liabilityType: { type: String, enum: ['revenue', 'liability', 'refundable'], default: 'revenue' },
