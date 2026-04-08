@@ -212,29 +212,43 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                     {
                         $group: {
                             _id: null,
-                            totalPending: {
-                                $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$amount', 0] }
-                            },
-                            amountToDrivers: {
-                                $sum: {
+                            // Net Pending Calculation
+                            pendingEarnings: {
+                                $sum: { 
                                     $cond: [
-                                        { $and: [{ $eq: ['$status', 'pending'] }, { $eq: ['$paymentType', 'delivery_fee'] }] },
-                                        '$amount',
+                                        { $and: [{ $eq: ['$status', 'pending'] }, { $in: ['$paymentType', ['sale', 'seller_payment', 'security_deposit']] }] }, 
+                                        '$amount', 
                                         0
-                                    ]
+                                    ] 
                                 }
                             },
-                            amountToRefund: {
-                                $sum: {
+                            pendingRefunds: {
+                                $sum: { 
                                     $cond: [
-                                        { $and: [{ $eq: ['$status', 'pending'] }, { $in: ['$paymentType', ['refund', 'partial_refund']] }] },
-                                        '$amount',
+                                        { $and: [{ $eq: ['$status', 'pending'] }, { $in: ['$paymentType', ['refund', 'partial_refund']] }] }, 
+                                        '$amount', 
                                         0
-                                    ]
+                                    ] 
                                 }
                             },
-                            clearedAmount: {
-                                $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$amount', 0] }
+                            // Net Cleared Calculation
+                            clearedEarnings: {
+                                $sum: { 
+                                    $cond: [
+                                        { $and: [{ $eq: ['$status', 'completed'] }, { $in: ['$paymentType', ['sale', 'seller_payment', 'security_deposit']] }] }, 
+                                        '$amount', 
+                                        0
+                                    ] 
+                                }
+                            },
+                            clearedRefunds: {
+                                $sum: { 
+                                    $cond: [
+                                        { $and: [{ $eq: ['$status', 'completed'] }, { $in: ['$paymentType', ['refund', 'partial_refund']] }] }, 
+                                        '$amount', 
+                                        0
+                                    ] 
+                                }
                             },
                             pendingCount: {
                                 $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
@@ -246,6 +260,20 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                 $sum: { $cond: [{ $in: ['$paymentType', ['refund', 'partial_refund']] }, 1, 0] }
                             }
                         }
+                    },
+                    {
+                        $project: {
+                            _id: 0,
+                            pendingEarnings: 1,
+                            pendingRefunds: 1,
+                            netPending: { $subtract: ['$pendingEarnings', '$pendingRefunds'] },
+                            clearedEarnings: 1,
+                            clearedRefunds: 1,
+                            netIncome: { $subtract: ['$clearedEarnings', '$clearedRefunds'] },
+                            pendingCount: 1,
+                            clearedCount: 1,
+                            refundCount: 1
+                        }
                     }
                 ]
             }
@@ -255,10 +283,12 @@ const getSellerPaymentTimeline = async (req, res, next) => {
 
         const data = result[0].data || [];
         const statsObj = result[0].stats[0] || {
-            totalPending: 0,
-            amountToDrivers: 0,
-            amountToRefund: 0,
-            clearedAmount: 0,
+            pendingEarnings: 0,
+            pendingRefunds: 0,
+            netPending: 0,
+            clearedEarnings: 0,
+            clearedRefunds: 0,
+            netIncome: 0,
             pendingCount: 0,
             clearedCount: 0,
             refundCount: 0
@@ -269,7 +299,10 @@ const getSellerPaymentTimeline = async (req, res, next) => {
             data: data,
             summary: {
                 ...statsObj,
-                refundCount: statsObj.refundCount || 0,
+                // Legacy support for older frontend versions
+                totalPending: statsObj.netPending,
+                clearedAmount: statsObj.netIncome,
+                
                 statusDistribution: {
                     pending: statsObj.pendingCount,
                     completed: statsObj.clearedCount
