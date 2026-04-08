@@ -294,7 +294,7 @@ const getSellerPaymentTimeline = async (req, res, next) => {
                                     pending: '$pendingRefunds',
                                     collected: '$collectedRefunds',
                                     completed: '$completedRefunds',
-                                    totalPaid: { $add: ['$collectedRefunds', '$completedRefunds'] }
+                                    paid: { $add: ['$collectedRefunds', '$completedRefunds'] }
                                 },
                                 net: {
                                     pending: { $subtract: ['$pendingIncome', '$pendingRefunds'] },
