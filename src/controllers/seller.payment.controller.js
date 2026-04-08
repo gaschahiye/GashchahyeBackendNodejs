@@ -156,28 +156,7 @@ const getSellerPaymentTimeline = async (req, res, next) => {
             }
         });
 
-        // Search Filter on Resolved Fields
-        if (searchQuery) {
-            pipeline.push({
-                $match: {
-                    $or: [
-                        { 'orderId': { $regex: searchQuery, $options: 'i' } },
-                        { 'resolvedPerson.name': { $regex: searchQuery, $options: 'i' } },
-                        { 'resolvedPerson.phone': { $regex: searchQuery, $options: 'i' } }
-                    ]
-                }
-            });
-        }
-
-        if (status) {
-            if (status === 'completed' || status === 'cleared') {
-                // For a seller, a "collected" refund is effectively "cleared" from their balance
-                pipeline.push({ $match: { 'paymentTimeline.status': { $in: ['completed', 'collected'] } } });
-            } else {
-                pipeline.push({ $match: { 'paymentTimeline.status': status } });
-            }
-        }
-        if (type) pipeline.push({ $match: { 'paymentTimeline.type': type } });
+        // Filters moved to after projection so they only affect the list, not the global stats!
 
         // Project Final Structure
         pipeline.push({
@@ -208,12 +187,35 @@ const getSellerPaymentTimeline = async (req, res, next) => {
 
         pipeline.push({ $sort: { date: -1 } });
 
+        // Build the data filter pipeline specifically for the list view
+        const dataFilters = [];
+
+        if (searchQuery) {
+            dataFilters.push({
+                $match: {
+                    $or: [
+                        { 'orderId': { $regex: searchQuery, $options: 'i' } },
+                        { 'personName': { $regex: searchQuery, $options: 'i' } },
+                        { 'phone': { $regex: searchQuery, $options: 'i' } }
+                    ]
+                }
+            });
+        }
+
+        if (status) {
+            if (status === 'completed' || status === 'cleared') {
+                dataFilters.push({ $match: { 'status': { $in: ['completed', 'collected'] } } });
+            } else {
+                dataFilters.push({ $match: { 'status': status } });
+            }
+        }
+        
+        if (type) dataFilters.push({ $match: { 'paymentType': type } });
+
         // Facet for Stats and Data (no pagination - get all)
         pipeline.push({
             $facet: {
-                data: [
-                    { $match: {} } // Get all records
-                ],
+                data: dataFilters,
                 stats: [
                     {
                         $group: {
