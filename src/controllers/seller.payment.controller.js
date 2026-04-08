@@ -308,7 +308,7 @@ const getSellerPaymentTimeline = async (req, res, next) => {
         const result = await Order.aggregate(pipeline);
 
         const data = result[0].data || [];
-        const finalSummary = result[0].summary[0] || {
+        const finalSummary = result[0].stats[0]?.summary || {
             income: { pending: 0, paid: 0 },
             refunds: { pending: 0, collected: 0, completed: 0, totalPaid: 0 },
             net: { pending: 0, cleared: 0 },
