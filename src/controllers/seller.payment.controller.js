@@ -169,8 +169,14 @@ const getSellerPaymentTimeline = async (req, res, next) => {
             });
         }
 
-        // Other Filters
-        if (status) pipeline.push({ $match: { 'paymentTimeline.status': status } });
+        if (status) {
+            if (status === 'completed' || status === 'cleared') {
+                // For a seller, a "collected" refund is effectively "cleared" from their balance
+                pipeline.push({ $match: { 'paymentTimeline.status': { $in: ['completed', 'collected'] } } });
+            } else {
+                pipeline.push({ $match: { 'paymentTimeline.status': status } });
+            }
+        }
         if (type) pipeline.push({ $match: { 'paymentTimeline.type': type } });
 
         // Project Final Structure
