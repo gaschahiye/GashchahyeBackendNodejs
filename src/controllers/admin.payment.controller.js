@@ -113,6 +113,20 @@ const getPaymentTimeline = async (req, res, next) => {
                                 }
                             },
                             {
+                                case: { 
+                                    $and: [
+                                        { $in: ['$paymentTimeline.type', ['refund', 'partial_refund']] },
+                                        { $eq: ['$paymentTimeline.status', 'pending'] }
+                                    ] 
+                                },
+                                then: {
+                                    name: { $ifNull: ['$sellerInfo.businessName', '$sellerInfo.fullName'] },
+                                    type: 'seller',
+                                    phone: '$sellerInfo.phoneNumber',
+                                    personId: '$sellerInfo._id'
+                                }
+                            },
+                            {
                                 case: { $in: ['$paymentTimeline.type', ['refund', 'partial_refund']] },
                                 then: {
                                     name: '$buyerInfo.fullName',
